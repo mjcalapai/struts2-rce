@@ -45,6 +45,16 @@ Messages are handled as:
 
 The service parses incoming requests, dispatches them to handlers, and returns either a normal response or a structured error object. 
 
+### Running C2
+
+```bash
+chmod +x ./loader.sh 
+
+./loader.sh [target_ip] ./implant.py 
+
+python3 controller.py [target_ip]
+```
+
 ### Supported Capabilities
 
 The implant currently defines handlers for:
