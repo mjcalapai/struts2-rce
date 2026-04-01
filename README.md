@@ -63,3 +63,9 @@ These are implemented through the internal command-handler mapping in the Python
 - The listener is configured to bind on all interfaces on port `4444`. 
 - The loader script starts a temporary local HTTP server, triggers retrieval of the implant, then triggers execution as a second stage. 
 - This should only be used inside disposable VMs or similarly isolated lab systems.
+
+---
+
+## Architecture Diagram
+
+![Architecture Diagram](image.png)
