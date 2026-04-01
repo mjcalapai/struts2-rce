@@ -68,4 +68,4 @@ These are implemented through the internal command-handler mapping in the Python
 
 ## Architecture Diagram
 
-![Architecture Diagram](image.png)
+![Architecture Diagram](./assets/image.png)
