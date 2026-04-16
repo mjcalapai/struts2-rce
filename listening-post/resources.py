@@ -23,12 +23,16 @@ class Tasks(Resource):
 
             if not data:
                 return {"error": "Request body must be JSON"}, 400
+            
+            if isinstance(data, list):
+                return {"error": "Request body must be JSON"}, 400
 
             task = {
                 "id": str(uuid.uuid4()),
                 "title": data.get("title"),
                 "description": data.get("description"),
-                "status": data.get("status", "pending")
+                "status": data.get("status", "pending"),
+                "task_type": data.get("task_type")
             }
 
             if not task["title"]:
