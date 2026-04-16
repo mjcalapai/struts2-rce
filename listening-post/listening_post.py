@@ -15,9 +15,12 @@ supabase = create_client(
     os.getenv("SUPABASE_KEY")
 )
 
+
+
 api = Api(app)
 
 api.add_resource(resources.Tasks, "/tasks", resource_class_kwargs={"supabase": supabase})
+api.add_resource(resources.Results, '/results', resource_class_kwargs={"supabase": supabase})
 
 if __name__ == "__main__":
     app.run(debug=True)
