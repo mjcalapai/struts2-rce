@@ -8,7 +8,6 @@ class Tasks(Resource):
     def __init__(self, supabase):
         self.supabase = supabase
 
-    # ListTasks
     def get(self):
         try:
             response = self.supabase.table("tasks").select("*").execute()
@@ -16,7 +15,6 @@ class Tasks(Resource):
         except Exception as e:
             return {"error": str(e)}, 500
 
-    # AddTasks
     def post(self):
         try:
             data = request.get_json()
@@ -24,7 +22,7 @@ class Tasks(Resource):
             if not data:
                 return {"error": "Request body must be JSON"}, 400
 
-            # Accept either a single JSON object or a list of objects
+            #Either object or array of objects are accepted
             if isinstance(data, dict):
                 data = [data]
 
@@ -53,14 +51,13 @@ class Tasks(Resource):
                 # Insert into tasks table
                 task_response = self.supabase.table("tasks").insert(task).execute()
                 inserted_tasks.extend(task_response.data)
-
-                # Build task_options similar to the original Mongo version
+                #build task options string for history entry
                 task_options = []
                 for key, value in item.items():
                     if key not in ["title", "description", "status", "task_type"]:
                         task_options.append(f"{key}: {value}")
 
-                # Insert into history table
+                #Insert into history table
                 history_entry = {
                     "task_id": task_id,
                     "task_type": task["task_type"],
@@ -92,7 +89,6 @@ class Results(Resource):
     def post(self):
         try:
             data = request.get_json()
-
             if not data:
                 return {"error": "Request body must be JSON"}, 400
 
@@ -122,11 +118,11 @@ class History(Resource):
     # ListHistory
     def get(self):
         try:
-            # Get all result rows
+            
             results_response = self.supabase.table("results").select("*").execute()
             results_rows = results_response.data
 
-            # Update matching history row with result output
+            #update matching history row with result output
             for result in results_rows:
                 task_id = result.get("task_id")
                 output = result.get("output")
@@ -137,7 +133,6 @@ class History(Resource):
                         .eq("task_id", task_id) \
                         .execute()
 
-            # Return refreshed history rows
             updated_history_response = self.supabase.table("history").select("*").execute()
             return updated_history_response.data, 200
 
