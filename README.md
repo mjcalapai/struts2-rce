@@ -45,6 +45,16 @@ Messages are handled as:
 
 The service parses incoming requests, dispatches them to handlers, and returns either a normal response or a structured error object. 
 
+### Running C2
+
+```bash
+chmod +x ./loader.sh 
+
+./loader.sh [target_ip] ./implant.py 
+
+python3 controller.py [target_ip]
+```
+
 ### Supported Capabilities
 
 The implant currently defines handlers for:
@@ -63,3 +73,9 @@ These are implemented through the internal command-handler mapping in the Python
 - The listener is configured to bind on all interfaces on port `4444`. 
 - The loader script starts a temporary local HTTP server, triggers retrieval of the implant, then triggers execution as a second stage. 
 - This should only be used inside disposable VMs or similarly isolated lab systems.
+
+---
+
+## Architecture Diagram
+
+![Architecture Diagram](./assets/image.png)
