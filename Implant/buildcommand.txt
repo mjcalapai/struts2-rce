@@ -1,0 +1,10 @@
+I used the following command:
+
+g++ -std=c++17 main.cpp implant.cpp results.cpp tasks.cpp -I/opt/homebrew/include -L/opt/homebrew/opt/cpr/lib -L/opt/homebrew/opt/boost/lib -o implant -lcpr -lpthread  
+
+
+
+requirements:
+ - boost : (installed w/ brew install boost)
+ - cpr : (brew install cpr)
+ - nlohmann-json : (brew install nlohmann-json)

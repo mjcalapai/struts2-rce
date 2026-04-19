@@ -1,11 +1,6 @@
-<<<<<<< HEAD
 venv/
 .env/
 env/
 .venv/
 .env
-=======
-.env
-venv/
->>>>>>> bbc601b95a164c59df897ba2748f76836cbadad1
 __pycache__/
