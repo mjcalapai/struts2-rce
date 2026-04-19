@@ -52,7 +52,7 @@ PingTask::PingTask(const boost::uuids::uuid& id)
     : id{id} {}
 
 Result PingTask::run() const {
-    return Result{id, "PONG!", true};
+    return Result{id, "PuNG!", true};
 }
 
 ConfigureTask::ConfigureTask(
