@@ -1,4 +1,0 @@
-Flask==3.0.3
-Flask-RESTful==0.3.10
-supabase==2.4.0
-python-dotenv==1.0.1
