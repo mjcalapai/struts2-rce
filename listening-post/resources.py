@@ -81,20 +81,15 @@ class Results(Resource):
 
         Receives a JSON object keyed by task UUID, where each value contains
         the result of that task:
-            {
-                "<task-uuid>": { "contents": "PONG!", "success": "true" },
-                ...
-            }
 
         On an initial beacon before any tasks have run, the implant sends an
         empty object {}, which is handled gracefully.
-
         After processing incoming results (and writing history), this endpoint
         returns all pending tasks formatted for parseTasks():
             {
                 "0": { "task_id": "...", "task_type": "ping" },
                 "1": { "task_id": "...", "task_type": "configure", "dwell": 5.0, "running": true }
-            }
+            } 
         """
         try:
             data = request.get_json() or {}
