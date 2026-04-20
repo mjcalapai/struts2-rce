@@ -43,9 +43,21 @@ private:
     const bool isRunning;
 };
 
+struct ExecuteTask {
+    ExecuteTask(const boost::uuids::uuid& id, std::string command);
+    constexpr static std::string_view key{ "execute" };
+    [[nodiscard]] Result run() const;
+    const boost::uuids::uuid id;
+
+private:
+    const std::string command;
+
+};
+
+
 
 //Any new tasks have to be added here too!!!
-using Task = std::variant<PingTask, ConfigureTask>;
+using Task = std::variant<PingTask, ConfigureTask, ExecuteTask>;
 
 [[nodiscard]] Task parseTaskFrom(const boost::property_tree::ptree& taskTree,
     std::function<void(const Configuration&)> setter);

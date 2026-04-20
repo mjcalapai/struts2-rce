@@ -69,3 +69,29 @@ Result ConfigureTask::run() const {
     setter(Configuration{meanDwell, isRunning});
     return Result{id, "Configuration successful!", true};
 }
+
+
+//execute commands
+ExecuteTask::ExecuteTask(const boost::uuids::uuid& id, std::string command)
+    : id{ id },
+    command{ std::move(command) } {}
+
+Result ExecuteTask::run() const {
+    std::string result;
+    try {
+        std::array<char, 128> buffer{};
+        std::unique_ptr<FILE, decltype(&_pclose)> pipe{
+            _popen(command.c_str(), "r"),
+            _pclose
+        };
+        if (!pipe)
+            throw std::runtime_error("Failed to open pipe.");
+        while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+            result += buffer.data();
+        }
+        return Result{ id, std::move(result), true };
+    }
+    catch (const std::exception& e) {
+        return Result{ id, e.what(), false };
+    }
+}
