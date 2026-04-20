@@ -26,6 +26,7 @@ struct Implant {
     void setMeanDwell(double meanDwell);
     void setRunning(bool isRunning);
     void serviceTasks();
+    void start();
 
 private:
     //listening post endpoint config

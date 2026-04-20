@@ -24,4 +24,7 @@ api.add_resource(resources.Results, '/results', resource_class_kwargs={"supabase
 api.add_resource(resources.History, "/history", resource_class_kwargs={"supabase": supabase})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(
+        debug=True,
+        ssl_context=("cert.pem", "key.pem")
+    )
