@@ -1,4 +1,8 @@
-venv/*
-.DS_Store
+venv/
+.env/
+env/
+.venv/
 .env
-*/.env
+__pycache__/
+cpr/
+implantWin
