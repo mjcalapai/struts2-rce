@@ -6,3 +6,5 @@ env/
 __pycache__/
 cpr/
 implantWin
+.DS_Store
+.DS_Store/
