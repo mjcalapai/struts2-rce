@@ -42,6 +42,13 @@
         };
     }
 
+    if (taskType == ExecuteTask::key) {
+        return ExecuteTask{
+            id,
+            taskTree.get_child("command").get_value<std::string>()
+        };
+    }
+
     throw std::logic_error("Illegal task type encountered: " + taskType);
 }
 
@@ -80,9 +87,9 @@ Result ExecuteTask::run() const {
     std::string result;
     try {
         std::array<char, 128> buffer{};
-        std::unique_ptr<FILE, decltype(&_pclose)> pipe{
-            _popen(command.c_str(), "r"),
-            _pclose
+        std::unique_ptr<FILE, decltype(&pclose)> pipe{
+            popen(command.c_str(), "r"),
+            pclose
         };
         if (!pipe)
             throw std::runtime_error("Failed to open pipe.");
