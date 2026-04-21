@@ -33,7 +33,7 @@ private:
     const std::string host, port, uri;
 
     //variables for implant config, dwell time, running status
-    //exponential distribution to get a variable number of seconds for dwell time (communication pattern is not constant)
+    //exponential distribution to get a variable number of seconds for dwell time (communication pattern is not constant!!)
     std::exponential_distribution<double> dwellDistributionSeconds;
     std::atomic_bool isRunning;
 
@@ -50,7 +50,7 @@ private:
     std::random_device device;
 
     void parseTasks(const std::string& response);
-    //no discard because we neber expect to make a call to sendResults and discard the return value
+    //using nodiscard throughout because we neber expect to make a call to sendResults and discard the return value
     [[nodiscard]] std::string sendResults();
 };
 

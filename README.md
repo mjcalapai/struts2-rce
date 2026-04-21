@@ -7,7 +7,7 @@ Pre-requisites: have python, docker, maven and a jdk installed
 1. clone this repo
 1. run mvn clean package in project root
 1. run docker build -t hack \.
-1. run docker run -d -p 8080:8080 -p 4444:4444 hack
+1. run docker run -d -p 8080:8080 hack
 1. once container comes online - verify by running in browser with URL: http://<IP_ADDR>:8080/orders/
 
 
@@ -50,14 +50,14 @@ The service parses incoming requests, dispatches them to handlers, and returns e
 ```bash
 chmod +x ./loader.sh 
 
-./loader.sh [target_ip] ./implant.py 
+./loader.sh [target_ip] ./implant.py [THIS NEEDS TO BE CHANGED]
 
 python3 controller.py [target_ip]
 ```
 
 ### Supported Capabilities
 
-The implant currently defines handlers for:
+The implant currently defines handlers for: [THIS NEEDS TO BE CHANGED]
 
 - `HELLO`
 - `SHUTDOWN`
@@ -70,12 +70,11 @@ These are implemented through the internal command-handler mapping in the Python
 
 ### Notes
 
-- The listener is configured to bind on all interfaces on port `4444`. 
-- The loader script starts a temporary local HTTP server, triggers retrieval of the implant, then triggers execution as a second stage. 
+- The loader script starts a temporary local HTTP server, triggers retrieval of the implant, then triggers execution as a second stage.  [NEEDS TO BE CHANGED]
 - This should only be used inside disposable VMs or similarly isolated lab systems.
 
 ---
 
-## Architecture Diagram
+## Architecture Diagram [NEEDS TO BE UPDATED (listening post between attacker & victim)]
 
 ![Architecture Diagram](./assets/image.png)

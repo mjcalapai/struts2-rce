@@ -12,9 +12,9 @@
 FROM tomcat:7
 MAINTAINER piesecurity <admin@pie-secure.org>
 
-ENV ADMIN_USER="mark"
+ENV ADMIN_USER="admin"
 ENV PG_VERSION=9.3.4
-ENV ADMIN_PASSWORD="jigsawroxx"
+ENV ADMIN_PASSWORD="guest"
 
 RUN set -ex \
     && printf 'deb http://archive.debian.org/debian buster main\n' > /etc/apt/sources.list \

