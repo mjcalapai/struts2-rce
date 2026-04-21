@@ -272,6 +272,18 @@ def run_repl(client: LPClient):
 
                 ok(f"Bundle '{bundle_name}' queued — {len(results)} task(s) submitted.")
 
+            ##add configure case, the task_type is "configure"
+            ##So the JSON payload should look like this for example:
+                    #json[
+                        #{
+                            #"task_type": "configure",
+                            #"task_id": xxxx,
+                            #"dwell": 30.0, (means post on average every 30 seconds)
+                            #"running": true
+                        #}
+                    #]
+            
+            
             else:
                 err(f"Unknown command '{cmd}'. Type 'help'.")
 

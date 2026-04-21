@@ -1,7 +1,17 @@
-I used the following command:
+I used the following command to compile on macOS:
 
 g++ -std=c++17 main.cpp implant.cpp results.cpp tasks.cpp -I/opt/homebrew/include -L/opt/homebrew/opt/cpr/lib -L/opt/homebrew/opt/boost/lib -o implant -lcpr -lpthread  
 
+I used the following command to compile on linux:
+
+g++ main.cpp implant.cpp results.cpp tasks.cpp -o IMPLANT_NAME \
+  -std=c++17 \
+  -I/usr/local/include \
+  -L/usr/local/lib \
+  -lcpr -lcurl \
+  -lssl -lcrypto \
+  -lboost_system \
+  $(pkg-config --cflags nlohmann_json)
 
 
 requirements:

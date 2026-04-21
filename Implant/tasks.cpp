@@ -49,6 +49,8 @@
         };
     }
 
+    //ADD NEW TASKS HERE
+
     throw std::logic_error("Illegal task type encountered: " + taskType);
 }
 
@@ -59,9 +61,10 @@ PingTask::PingTask(const boost::uuids::uuid& id)
     : id{id} {}
 
 Result PingTask::run() const {
-    return Result{id, "PuNG!", true};
+    return Result{id, "PING REPLY", true};
 }
 
+//task to configure implant's dwell time / running status
 ConfigureTask::ConfigureTask(
     const boost::uuids::uuid& id,
     double meanDwell,
@@ -87,6 +90,7 @@ Result ExecuteTask::run() const {
     std::string result;
     try {
         std::array<char, 128> buffer{};
+        //note pclose and popen used not _pclose/_popen 
         std::unique_ptr<FILE, decltype(&pclose)> pipe{
             popen(command.c_str(), "r"),
             pclose
