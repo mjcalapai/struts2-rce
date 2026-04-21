@@ -59,7 +59,7 @@ class Tasks(Resource):
                 inserted_tasks.extend(task_response.data)
 
             return inserted_tasks, 201
-
+        
         except Exception as e:
             return {"error": str(e)}, 500
 

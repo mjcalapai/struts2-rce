@@ -2,6 +2,14 @@ I used the following command:
 
 g++ -std=c++17 main.cpp implant.cpp results.cpp tasks.cpp -I/opt/homebrew/include -L/opt/homebrew/opt/cpr/lib -L/opt/homebrew/opt/boost/lib -o implant -lcpr -lpthread  
 
+g++ -std=c++17 -O2 -DNDEBUG -DBOOST_DISABLE_ASSERTS \
+    -fvisibility=hidden -fvisibility-inlines-hidden \
+    -ffunction-sections -fdata-sections \
+    main.cpp implant.cpp results.cpp tasks.cpp \
+    -I/usr/include -I. \
+    -o implant \
+    -lcpr -lboost_system -lboost_filesystem -lcurl -lssl -lcrypto -lz -lpthread \
+    -Wl,--gc-sections -Wl,--strip-all -Wl,--exclude-libs,ALL
 
 
 requirements:
