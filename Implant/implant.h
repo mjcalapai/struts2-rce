@@ -14,9 +14,9 @@
 
 #include <boost/property_tree/ptree.hpp>
 
-struct Implant {
-    //Implant constructor
-    Implant(std::string host, std::string port, std::string uri);
+struct NetSession {
+    //NetSession constructor
+    NetSession(std::string host, std::string port, std::string uri);
 
     //thread for servicing tasks
     std::future<void> taskThread;
