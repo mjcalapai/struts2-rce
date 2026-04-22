@@ -37,7 +37,7 @@ BUNDLES: dict[str, list[dict]] = {
         {"title": "System info",        "task_type": "execute", "command": "uname -a"},
         {"title": "OS release",         "task_type": "execute", "command": "cat /etc/os-release"},
         {"title": "Local users",        "task_type": "execute", "command": "cat /etc/passwd"},
-        {"title": "Logged in users",    "task_type": "execute", "command": "who"},
+        # {"title": "Logged in users",    "task_type": "execute", "command": "who"},
         {"title": "Active connections", "task_type": "execute", "command": "ss -tulnp"},
     ],
     "fs": [
