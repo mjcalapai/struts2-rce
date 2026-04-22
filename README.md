@@ -92,7 +92,7 @@ list-results
 
 ## Architecture / Threat-Model Diagram
 
-![Architecture Diagram](assets/milestone2.png)
+![Architecture Diagram](./assets/milestone2.png)
   
 
 Further Details:
