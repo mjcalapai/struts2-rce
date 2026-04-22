@@ -27,7 +27,7 @@ try:
 except ImportError:
     _PT = False
 
-
+# Predefined task bundles
 BUNDLES: dict[str, list[dict]] = {
     "recon": [
         {"title": "Who am I",          "task_type": "execute", "command": "whoami"},
@@ -153,34 +153,47 @@ Available bundles: {", ".join(BUNDLES.keys())}
 
 class LPClient:
     def __init__(self, host: str, port: int, timeout: int = 10):
+        # Normalize base URL:
+        # - If user provides full scheme (http/https), respect it
+        # - Otherwise default to HTTPS
         if host.startswith("http://") or host.startswith("https://"):
             self.base_url = f"{host.rstrip('/')}:{port}"
         else:
             self.base_url = f"https://{host}:{port}"
+
         self.timeout = timeout
         self._s = requests.Session()
+
+        # Default headers for all requests
         self._s.headers.update({"Content-Type": "application/json"})
+
+        # Disable TLS verification (useful for self-signed certs)
         self._s.verify = False
         requests.packages.urllib3.disable_warnings()
 
     def _get(self, endpoint: str):
+        # Generic GET wrapper with error propagation
         r = self._s.get(f"{self.base_url}{endpoint}", timeout=self.timeout)
         r.raise_for_status()
         return r.json()
 
     def _post(self, endpoint: str, payload):
+        # Generic POST wrapper for sending JSON payloads
         r = self._s.post(f"{self.base_url}{endpoint}", json=payload, timeout=self.timeout)
         r.raise_for_status()
         return r.json()
 
+    # Thin wrappers for API endpoints
     def list_tasks(self):   return self._get("/tasks")
     def list_results(self): return self._get("/results")
     def list_history(self): return self._get("/history")
 
     def submit_bundle(self, bundle_name: str) -> list:
+        # Submit multiple tasks sequentially
         tasks = BUNDLES[bundle_name]
         responses = []
         for task in tasks:
+            # Each task is sent as an independent POST request
             resp = self._post("/tasks", task)
             responses.append((task, resp))
         return responses
@@ -211,10 +224,10 @@ def run_repl(client: LPClient):
         try:
             line = _input().strip()
         except (KeyboardInterrupt, EOFError):
-            print(); break
+            print(); break  # graceful exit on Ctrl+C or Ctrl+D
 
         if not line:
-            continue
+            continue    # ignore empty input
 
         parts = line.split()
         cmd   = parts[0].lower()
@@ -231,6 +244,7 @@ def run_repl(client: LPClient):
                 print_bundles()
 
             elif cmd == "list-tasks":
+                # Fetch tasks from server and display
                 data = client.list_tasks()
                 if not data: warn("No tasks found.")
                 else:
@@ -258,6 +272,8 @@ def run_repl(client: LPClient):
                     continue
 
                 bundle_name = args[0].lower()
+
+                # Validate bundle name
                 if bundle_name not in BUNDLES:
                     err(f"Unknown bundle '{bundle_name}'")
                     info(f"Available: {', '.join(BUNDLES.keys())}")
@@ -266,7 +282,10 @@ def run_repl(client: LPClient):
                 bundle_tasks = BUNDLES[bundle_name]
                 info(f"Queuing {len(bundle_tasks)} task(s) from {bundle_name} ...")
 
+                # Submit tasks one by one to backend
                 results = client.submit_bundle(bundle_name)
+
+                # Print confirmation
                 for task, resp in results:
                     ok(f"  ✓ {task['title']}")
 
@@ -286,9 +305,11 @@ def run_repl(client: LPClient):
             
             else:
                 err(f"Unknown command '{cmd}'. Type 'help'.")
-
+        
+        # Network failure handling
         except (ConnectionError, Timeout):
             err(f"Lost connection to {client.base_url}")
+        # HTTP-level error handling
         except HTTPError as exc:
             err(f"HTTP {exc.response.status_code}: {exc.response.text}")
         except Exception as exc:
@@ -298,6 +319,7 @@ def run_repl(client: LPClient):
 
 
 def main():
+    # Parse CLI arguments
     p = argparse.ArgumentParser(description="Operator CLI")
     p.add_argument("host")
     p.add_argument("port", nargs="?", type=int, default=5000)
@@ -307,6 +329,8 @@ def main():
     client = LPClient(a.host, a.port, timeout=a.timeout)
 
     info(f"Connecting to {client.base_url} ...")
+
+    # Health check: ensure server is reachable before entering REPL
     try:
         client.list_tasks()
     except (ConnectionError, Timeout):

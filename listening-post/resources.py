@@ -6,10 +6,12 @@ from flask_restful import Resource
 
 class Tasks(Resource):
     def __init__(self, supabase):
+        # Dependency injection: reuse shared Supabase client
         self.supabase = supabase
 
     def get(self):
         try:
+            # Fetch all tasks from database
             response = self.supabase.table("tasks").select("*").execute()
             return response.data, 200
         except Exception as e:
@@ -17,6 +19,7 @@ class Tasks(Resource):
 
     def post(self):
         try:
+            # Parse incoming JSON body
             data = request.get_json()
 
             if not data:
@@ -32,6 +35,7 @@ class Tasks(Resource):
             inserted_tasks = []
 
             for item in data:
+                # Generate unique task ID
                 task_id = str(uuid.uuid4())
 
                 # Separate standard fields from task-type-specific parameters
@@ -40,6 +44,7 @@ class Tasks(Resource):
                 standard_fields = {"title", "description", "status", "task_type"}
                 parameters = {k: v for k, v in item.items() if k not in standard_fields}
 
+                # Construct normalized task object for DB
                 task = {
                     "id": task_id,
                     "title": item.get("title"),
@@ -49,12 +54,14 @@ class Tasks(Resource):
                     "parameters": parameters,  
                 }
 
+                # Validation: required fields
                 if not task["title"]:
                     return {"error": "title is required"}, 400
 
                 if not task["task_type"]:
                     return {"error": "task_type is required"}, 400
 
+                # Insert into database
                 task_response = self.supabase.table("tasks").insert(task).execute()
                 inserted_tasks.extend(task_response.data)
 
@@ -70,6 +77,7 @@ class Results(Resource):
 
     def get(self):
         try:
+            # Retrieve all stored task execution results
             response = self.supabase.table("results").select("*").execute()
             return response.data, 200
         except Exception as e:
@@ -92,12 +100,13 @@ class Results(Resource):
             } 
         """
         try:
+            # Accept empty dict if no results yet
             data = request.get_json() or {}
-            
 
             if data is None:
                 return {"error": "Request body must be JSON"}, 400
 
+            # Reject incorrect payload format
             if isinstance(data, list):
                 return {"error": "Request body must be a JSON object, not a list"}, 400
 
@@ -134,9 +143,10 @@ class Results(Resource):
                         **parameters,
                     }
 
+                    # Flatten parameters into readable key-value strings
                     task_options = [f"{k}: {v}" for k, v in parameters.items()]
 
-                    #history entry includes full task context and result
+                    # History entry includes full task context and result
                     history_entry = {
                         "task_id": task_id,
                         "task_type": task.get("task_type"),
@@ -174,6 +184,8 @@ class Results(Resource):
                     "task_id": task["id"],
                     "task_type": task["task_type"],
                 }
+
+                # Merge dynamic parameters (task-specific configs)
                 task_entry.update(task.get("parameters") or {})
                 formatted_response[str(i)] = task_entry
 
@@ -197,6 +209,7 @@ class History(Resource):
 
     def get(self):
         try:
+            # Return full execution history of all tasks with context and results
             response = self.supabase.table("history").select("*").execute()
             return response.data, 200
         except Exception as e:
