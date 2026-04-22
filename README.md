@@ -37,7 +37,7 @@ Messages are handled as:
 
 ## Build Instructions:
 ENVIRONMENT
-   * Clone this repo https://github.com/lltee/struts2-rce (insert our repo name)
+   * Clone this repo
    * Run mvn clean package in the project root
    * Run docker built -t hack .
    * Run docker run -d -p 8080:8080 hack
