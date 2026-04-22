@@ -56,18 +56,16 @@ using json = nlohmann::json;
     }
 
     cpr::SslOptions sslOpts = cpr::Ssl(
-        cpr::ssl::VerifyHost{ true },
-        cpr::ssl::VerifyPeer{ true },
-        cpr::ssl::CaInfo{ tempCertPath }
+        cpr::ssl::VerifyHost{ false }, //change these to true once the certificates are fixed!
+        cpr::ssl::VerifyPeer{ false },
+        cpr::ssl::CaInfo{ std::move(tempCertPath) }
     );
 
     cpr::AsyncResponse asyncRequest = cpr::PostAsync(
         cpr::Url{ fullServerUrl },
         cpr::Body{ requestBody.dump() },
         cpr::Header{ {XOR_STR("Content-Type"), XOR_STR("application/json")} },
-        cpr::ssl::VerifyHost{ true },       // verify server hostname
-        cpr::ssl::VerifyPeer{ true },       // verify server certificate
-        cpr::CertInfo{ "cert.pem" }  // path to CA cert bundle
+        sslOpts   // <-- only this, nothing else SSL-related
     );
 
     //retrieve response
