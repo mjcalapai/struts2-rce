@@ -18,7 +18,7 @@ Based on: https://github.com/piesecurity/apache-struts2-CVE-2017-5638
 ## Protocol Summary
 Messages are handled as:
 1. Length-prefixed data
-2. HTTPS (TLS) for messages sent between implant and listening post
+2. HTTPS (TLS) for beaconing messages sent between implant and listening post
 3. Base64 encoding content
 4. XOR obfuscation to hide JSON payload structure mitigating against traffic analysis
 5. JSON format message payloads
@@ -28,12 +28,11 @@ Messages are handled as:
 
 ## Attacker: Send HTTP request
    * Injects OGNL(object graph navigation language) expression
-   * Executes Shell command that downloads and executes the implant
+   * Executes Shell command that downloads and executes the implant as root as well as establishes the implant's persistence by hooking into the Tomcat startup process
    * Attacker boots the listening post and the operator CLI (optionally in the same command as the implant download and execution)
-      * The attacker will send commands from the operator CLI to the listening post.
-      * The listening post will forward the task to the database (Supabase hosted), then encrypt the traffic with the CLI command and send it to the implant. This process will send results to the ‘tasks’ table, which can be seen currently with http:127.0.0.1:5000/tasks. This process will also create an entry on the history table.
-      * The implant will execute the command and send an encrypted result back to the listening post. This can be seen on the results table, or http://127.0.0.1:5000/results. This process will also mark the original task on the tasks table as completed, and will update the ‘task_results’ column of the history table.
-      * The implant sends the result from the implant back to the operator CLI after decrypting the result.
+      * The attacker will send commands from the operator CLI to the listening post, which are queued in a supabase hosted database.
+      * Upon receipt of a beacon from the implant, the listening post will forward the task's fetched from the database, encrypting the traffic.
+      * The implant will execute the task and send an encrypted result back to the listening post. This can be seen on the results table, or http://127.0.0.1:5000/results. This process will also mark the original task on the tasks table as completed, and will update the ‘task_results’ column of the history table.
 
 
 ## Build Instructions:
