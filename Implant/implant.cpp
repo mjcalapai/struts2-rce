@@ -65,7 +65,7 @@ using json = nlohmann::json;
         cpr::Url{ fullServerUrl },
         cpr::Body{ requestBody.dump() },
         cpr::Header{ {XOR_STR("Content-Type"), XOR_STR("application/json")} },
-        sslOpts   // <-- only this, nothing else SSL-related
+        sslOpts  
     );
 
     //retrieve response
