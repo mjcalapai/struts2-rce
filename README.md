@@ -1,24 +1,7 @@
 
 Based on: https://github.com/piesecurity/apache-struts2-CVE-2017-5638
 
-### Usage:
-Pre-requisites: have python, docker, maven and a jdk installed
 
-1. clone this repo
-1. run mvn clean package in project root
-1. run docker build -t hack \.
-1. run docker run -d -p 8080:8080 hack
-1. once container comes online - verify by running in browser with URL: http://<IP_ADDR>:8080/orders/
-
-
-
-README.txt - Rest Showcase Webapp
-
-Rest Showcase is a simple example of REST app build with the REST plugin.
-
-For more on getting started with Struts, see 
-
-* http://cwiki.apache.org/WW/home.html
 
 -------
 
