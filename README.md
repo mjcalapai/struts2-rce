@@ -32,7 +32,7 @@ Messages are handled as:
    * Attacker boots the listening post and the operator CLI (optionally in the same command as the implant download and execution)
       * The attacker will send commands from the operator CLI to the listening post, which are queued in a supabase hosted database.
       * Upon receipt of a beacon from the implant, the listening post will forward the task's fetched from the database, encrypting the traffic.
-      * The implant will execute the task and send an encrypted result back to the listening post. This can be seen on the results table, or http://127.0.0.1:5000/results. This process will also mark the original task on the tasks table as completed, and will update the ‘task_results’ column of the history table.
+      * The implant will execute the task and send an encrypted result back to the listening post. This can be seen on the results table. This process will also mark the original task on the tasks table as completed, and will update the ‘task_results’ column of the history table.
 
 
 ## Build Instructions:
