@@ -33,7 +33,7 @@ For more on getting started with Struts, see
 
 
 ## Protocol Summary
-        Messages are handled as
+Messages are handled as:
 1. Length-prefixed data
 2. HTTPS (TLS) for messages sent between implant and listening post
 3. Base64 encoding content
@@ -115,21 +115,3 @@ Further Details:
 * Implant uses OpenSSL’s default cipher list.
 * Certificate is embedded and XOR-encrypted and decrypted at runtime.
 * The implant uses HTTPS rather than HTTP or TCP to ensure no data is transmitted as plaintext.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Sources:
-https://www.blackduck.com/blog/cve-2017-5638-apache-struts-vulnerability-explained.html
-https://github.com/Iletee/struts2-rce
-https://shogunlab.gitbook.io/building-c2-implants-in-cpp-a-primer
