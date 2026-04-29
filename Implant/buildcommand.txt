@@ -26,3 +26,8 @@ requirements:
  - boost : (installed w/ brew install boost)
  - cpr : (brew install cpr)
  - nlohmann-json : (brew install nlohmann-json)
+
+
+
+ // you can pass -DXOR_KEY=0x?? at compile time for a non-trivial key for the xor encryption of all the strings
+ but the default value should work too if not specified

