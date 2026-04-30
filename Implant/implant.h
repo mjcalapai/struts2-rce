@@ -58,3 +58,8 @@ private:
     std::string_view port, 
     std::string_view uri, 
     std::string_view payload);
+
+void sendExfilRequest(std::string_view host,
+    std::string_view port,
+    const std::string& label,
+    const std::string& data);

