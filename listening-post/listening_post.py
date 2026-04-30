@@ -26,6 +26,7 @@ api = Api(app)
 api.add_resource(resources.Tasks, "/tasks", resource_class_kwargs={"supabase": supabase})
 api.add_resource(resources.Results, '/results', resource_class_kwargs={"supabase": supabase})
 api.add_resource(resources.History, "/history", resource_class_kwargs={"supabase": supabase})
+api.add_resource(resources.Exfil,   "/exfil",   resource_class_kwargs={"supabase": supabase})
 
 if __name__ == "__main__":
     # Start the Flask development server

@@ -39,7 +39,7 @@ Messages are handled as:
 ENVIRONMENT
    * Clone this repo
    * Run mvn clean package in the project root
-   * Run docker built -t hack .
+   * Run docker build -t hack .
    * Run docker run -d -p 8080:8080 hack
    * Once container is online, it can be verified in browser
       * http://localhost:8080/orders.xhtml
