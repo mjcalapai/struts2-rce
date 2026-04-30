@@ -22,15 +22,17 @@
 #include <nlohmann/json.hpp>
 
 
-// you can pass -DXOR_KEY=0x?? at compile time for a non-trivial key
-#ifndef XOR_KEY
-#define XOR_KEY 0x5A   // default – change per build
 
 
 #ifdef DEBUG_BUILD
 #define DEBUG_LOG(x) std::cout << x << std::endl
 #else
 #define DEBUG_LOG(x) ((void)0)
+#endif
+
+// you can pass -DXOR_KEY=0x?? at compile time for a non-trivial key
+#ifndef XOR_KEY
+#define XOR_KEY 0x5A   // default – change per build
 #endif
 
 
@@ -64,13 +66,13 @@ std::string NetSession::decryptConfig(const std::string& encrypted) const {
 
     auto secureHttps = XOR_STR_SECURE("https://"); // more secure string for critical info
     std::stringstream ss;
-    ss << secureHttps << serverAddress << ":" << serverPort << serverUri;
+    ss << secureHttps.c_str() << serverAddress << ":" << serverPort << serverUri;
     std::string fullServerUrl = ss.str();
 
     cpr::SslOptions sslOpts = cpr::Ssl(
         cpr::ssl::VerifyHost{ false },
         cpr::ssl::VerifyPeer{ false },
-        cpr::ssl::CaBuffer{ certPem }// directly from RAM
+        cpr::ssl::CaBuffer{ std::string(certPem) }// directly from RAM
     );
 
     cpr::AsyncResponse asyncRequest = cpr::PostAsync(
