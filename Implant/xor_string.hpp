@@ -33,12 +33,12 @@ namespace detail {
             char* ptr;
             size_t len;
         public:
-            SecureString(const XorString& xs) : len(xs.N - 1) {
-                ptr = new char[len + 1];
-                for (size_t i = 0; i < len; ++i)
-                    ptr[i] = xs.data[i] ^ XOR_KEY;
-                ptr[len] = 0;
-            }
+                SecureString(const XorString& xs) : len(xs.data.size() - 1) {
+                    ptr = new char[len + 1];
+                    for (size_t i = 0; i < len; ++i)
+                        ptr[i] = xs.data[i] ^ XOR_KEY;
+                    ptr[len] = 0;
+                }
             ~SecureString() {
                 if (ptr) {
                     volatile char* p = ptr;
